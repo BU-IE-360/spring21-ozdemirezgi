@@ -9,7 +9,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
-<meta name="author" content="Name Surname - IE360 - Spring 2021" />
+<meta name="author" content="Hatice Ezgi Özdemir - IE360 - Spring 2021" />
 
 
 <title>Interesting Forecasting Applications with R</title>
@@ -165,15 +165,32 @@ pre code {
 
 
 <h1 class="title toc-ignore">Interesting Forecasting Applications with R</h1>
-<h4 class="author">Name Surname - IE360 - Spring 2021</h4>
+<h4 class="author">Hatice Ezgi Özdemir - IE360 - Spring 2021</h4>
 
 </div>
 
 
+<p>{r,echo=FALSE,results=“hide”} library(knitr) opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)</p>
+<p>{r,echo=FALSE,eval=FALSE} rmarkdown::render(“/home/baydogan/Courses/IE360/Guidelines/example_homework_0.Rmd”,output_format=“pdf_document”) rmarkdown::render(“/home/baydogan/Courses/IE360/Guidelines/example_homework_0.Rmd”,output_format=“html_document”)</p>
 <ol style="list-style-type: decimal">
 <li><p><a href="https://blogs.oracle.com/datascience/introduction-to-forecasting-with-arima-in-r">Time series forecasting using ARIMA models</a></p>
-<p>This example is important because it introduces the forecasting methodology using ARIMA models in R. The steps are …</p></li>
-<li></li>
+<p>This example is important because it introduces the forecasting methodology using ARIMA models in R. The steps are</p>
+<ul>
+<li>Examining the data</li>
+<li>Decomposing the data</li>
+<li>Finding if the series is stationary</li>
+<li>Autocorrelations and choosing model order</li>
+<li>Fitting an ARIMA model</li>
+<li>Evaluating and iterating</li>
+</ul></li>
+<li><p><a href="https://itl.nist.gov/div898/handbook/pmc/section4/pmc43.htm">Forecasts Using Exponential Smoothing (ETS)</a></p>
+<p>Exponential smoothing is a scheme where exponentially decreasing weights are assigned to regressor values as the observation gets older.</p></li>
+<li><p><a href="https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/sma">Forecasts Using Simple Moving Average (SMA)</a></p>
+<p>Simple moving average is generally used for stock market technical analyses and determining trend directions. It is simply the average of the values of a specific period of time.</p></li>
+<li><p><a href="https://otexts.com/fpp2/regression-intro.html">Simple Linear Regression</a></p>
+<p>Simple linear regression is a technique where the linear relationship between an independent variable and a dependent variable is examined.</p></li>
+<li><p><a href="https://www.statisticssolutions.com/what-is-multiple-linear-regression/">Multiple Linear Regression</a></p>
+<p>Multiple linear regression basically has the same logic with simple linear regression. The difference is the fact that there are two or more independent variables in multiple linear regression, whereas there is only one independent variable in simple linear regression.</p></li>
 </ol>
 
 
