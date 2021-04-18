@@ -7,5 +7,5 @@
 
 ## Week 1 / Homework 1 (April 19)
 
-[Here](/files/HW1/IE360_HW1.html) are my interpretation of three data series from EVDS and their 
+[Here](files/HW1/IE360_HW1.html) are my interpretation of three data series from EVDS and their 
 related Google Trends data.
