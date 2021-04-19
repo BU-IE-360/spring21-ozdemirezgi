@@ -5,7 +5,7 @@
   As my data series, I chose USD/TRY exchange rates, interest rates on consumer loans, and consumer price index (CPI). The data series are observed at monthly level and the observations are from 10/2008-04/2021. 
     
   The R code written for this homework can be found 
-[here](https://bu-ie-360.github.io/spring21-ozdemirezgi/files/HW1/IE360_HW1.r)
+[here](https://bu-ie-360.github.io/spring21-ozdemirezgi/files/HW1/IE360_HW1.R)
 
   The R markdown file of this homework can be found
 [here](https://bu-ie-360.github.io/spring21-ozdemirezgi/files/HW1/IE360_HW1.Rmd)
