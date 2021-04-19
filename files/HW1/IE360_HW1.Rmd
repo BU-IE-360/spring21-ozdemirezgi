@@ -1,6 +1,6 @@
 # IE360 Homework 1  
 
-  In this homework, firstly, three data series from three different categories ate obtained from EVDS. After that, three words that are thought to be related to these data series are determined and their search volume data is obtained from Google Trends. Lastly, the relationship (or whether there is one or not) between these data series from EVDS and seach volume data from Google Trends is examined. 
+  In this homework, firstly, three data series from three different categories are obtained from EVDS. After that, three words that are thought to be related to these data series are determined and their search volume data is obtained from Google Trends. Lastly, the relationship (or whether there is one or not) between these data series from EVDS and seach volume data from Google Trends is examined. 
 
   As my data series, I chose USD/TRY exchange rates, interest rates on consumer loans, and consumer price index (CPI). The data series are observed at monthly level and the observations are from 10/2008-04/2021. 
     
@@ -49,9 +49,9 @@ there is an increase in 2019 between two decreases. After that peak, there is no
 
 ## 2. Interest Rates on Consumer Loans
 
-  It is commonly known that interest rates are strongly related to the appreciation/depreciation of the domestic currency, or exchange rates in a country. However, theory does not always match the real life, which is what we experience in Turkey time to time. Hence, I used interest rates on consumer loans in Turkey as my second data series. There is no specific reason why I chose consumer loans since consumer, commercial interest rates and interest rates on deposits draw very similar pictures. Therefore, one can address consumer interest rates just as "interest rates".
+  It is commonly known that interest rates are strongly related to the appreciation/depreciation of the domestic currency; hence, exchange rates in a country. However, theory does not always match the real life, which is what we experience in Turkey time to time. Hence, I used interest rates on consumer loans in Turkey as my second data series. There is no specific reason why I chose consumer loans since interest rates on consumer loans, commercial loans, and deposits draw very similar pictures. Therefore, one can address interest rates on consumer loans just as "interest rates".
 
-  The keyword for this data series is _faiz_. The reason is the same as above. As no other words are necessary in order to reach the news about the changes in the interest rates, people can find the latest decisions about the interest rates by only searching for the word _faiz_.
+  The keyword for this data series is _faiz_. The reason is the same as above. As no other words are necessary in order to reach the news about the changes in the interest rates, people can find the latest decisions about the interest rates by only searching the word _faiz_.
 
 ```{r, warning = FALSE, message = FALSE}
 cons_int <- unlist(EVDS[4])
@@ -68,13 +68,13 @@ axis(side = 1, labels = x_axis, at = 1:151, tick = FALSE, las = 2)
 ```
 
 
-  Until 2018, the interest rates are a bit volatile but after the peak, it becomes much more volatile than before, which is actually reflected on the search volume plot. Like usd/try exchange rate case, although big increases or decreases in the interest rates may result in some increases in the search volume of the word _faiz_, the peaks are seen with another peak and the enormous decrease afterwards in the interest rates and the search volume stays above a certain level after those peaks. 
+  Until 2018, the interest rates are a bit volatile but after the peak, it becomes much more volatile than before, which is actually reflected on the search volume plot. Like USD/TRY exchange rate case, although big increases or decreases in the interest rates may result in some increases in the search volume of the word _faiz_, the peaks in the search volume are seen with another peak and the enormous decrease afterwards in the interest rates and the search volume stays above a certain level after those peaks. 
 
 ## 3. Consume Price Index (CPI)
 
-  Although inflation is not essentially an unwanted thing in an economy, the inflation in Turkey is always above the target rate and as a country who imports a lot, the price of our everyday consumptions mostly depend on the exchange rates. Hence, I chose the CPI as my third data series.
+  Although inflation is not essentially an unwanted thing in an economy, the inflation in Turkey is always above the target rate and as a country which imports a lot, the prices of our everyday consumptions mostly depend on the exchange rates. Hence, I chose the CPI as my third data series.
 
-  The keyword I used for this data series is _enflasyon_. As the change in CPI level show itself in our lives almost immediately, I wanted to see how much people were interested in checking the inflation level after experiencing a significant price increase. 
+  The keyword I used for this data series is _enflasyon_. As the change in CPI level shows itself in our lives almost immediately, I wanted to see how much people were interested in checking the inflation level after experiencing a significant price increase. 
 ```{r, warning = FALSE, message = FALSE}
 cpi <- unlist(EVDS[6])
 names(cpi) <- NULL
@@ -88,4 +88,4 @@ plot(google_inf, type = "l", xaxt = "n", xlab = " ", ylab = " ", main = "The Sea
 axis(side = 1, labels = x_axis, at = 1:151, tick = FALSE, las = 2)
 ```
 
-  It can be seen above that the consumer price index of Turkey increases in an increasing way. Although there are certain increases in the search volume, the peak is again not until there is an unusual increase in the cpi. That is, people searched the word _enflasyon_ when the inflation rate was unusually high. After that peak, the cpi continues to increase a bit faster than before, which is partly reflected on the search volume plot as after the peak, it is much more volatile than before.
+  It can be seen above that the consumer price index of Turkey increases in an increasing way. Although there are certain increases in the search volume, the peak is again not until there is an unusual increase in the CPI. That is, people searched the word _enflasyon_ when the inflation rate was unusually high. After that peak, the CPI continues to increase a bit faster than before, which is partly reflected on the search volume plot as after the peak, it is much more volatile than before as people kind of got used to the increase of CPI but still felt the need for checking inflation level time to time.
