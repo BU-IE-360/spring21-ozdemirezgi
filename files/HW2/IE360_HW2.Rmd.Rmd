@@ -1,0 +1,131 @@
+# IE360 Homework 2
+## Intro
+
+  In this homework, three time series datasets was obtained from EVDS in order to forecast one of them by using the others as regressors. The question of interest is "What is the effect of consumer loan interest rates and EUR/TRY exchange rates on the consumer price index of purchase of vehicles?", the dependent variable being the consumer price index of purchase of vehicles.
+  
+  Firstly, the reason why EUR/TRY exchange rates was chosen (instead of USD/TRY) is the fact that although American or Japanese vehicles are also widely used in Turkey, European brands are generally chosen by Turkish customers; hence, EUR/TRY exchange rates are sort of more deterministic than USD/TRY exchange rates. Secondly, in Turkey, most of the people purchase vehicles by loans as they do not have enough cash at hand at the time. Therefore, the interest rates on consumer loans are though to be relevant to the demand of vehicles and hence; it was chosen as an independent variable. 
+  
+  The R markdown file of this homework can be found
+[here](https://bu-ie-360.github.io/spring21-ozdemirezgi/files/HW2/IE360_HW2.Rmd)
+  
+  The data series that are worked on can be found
+[here](https://bu-ie-360.github.io/spring21-ozdemirezgi/files/HW2/IE360_HW2_Data.zip)
+
+  
+## The data
+```{r, warning = FALSE, message = FALSE}
+library(data.table)
+library(forecast)
+library(lubridate)
+library(parsedate)
+library(readxl)
+library(ggplot2)
+EVDS_3_ <- read_excel("C:/Users/Ezgi-Pc/Downloads/EVDS (3).xlsx")
+
+evds <- EVDS_3_
+evds <- evds[-(1:2),]
+evds <- evds[-(154:171), ]
+names(evds) <- c("Date", "EUR_TRY", "Consumer_Interests", "CPI_Vehicles")
+evds <- evds[order(evds$Date),]
+```
+
+  Although the data of the variables on 04.21 is required not to be used, in order to be able to predict 04.21, the row of 05.21 is erased only and the date column was converted to class "Date".
+
+```{r, warning = FALSE, message = FALSE}
+evds <- evds[-(149:153),]
+evds$Date <- parse_date_time(evds$Date, "%y/%m")  
+evds$Date <- as.Date(evds$Date, format = "%y-%m-%d", optional = FALSE)
+evds <- data.table(evds)
+```
+
+### CPI of Vehicles
+  To observe how the CPI of vehicles changed across time,
+```{r, warning = FALSE, message = FALSE}
+ggplot(evds, aes(x = Date, y = CPI_Vehicles)) + geom_line()
+```
+ 
+  As seen above, there is an upward trend in the data with an unexpected increase in 2018. In addition, there is no seasonality observed. The trend component can also be seen by regressing on it as below.
+```{r, warning = FALSE, message = FALSE}
+evds[,trend:=1:.N]
+reg1 <- lm(CPI_Vehicles~trend, evds)
+summary(reg1)
+```
+Here, as the p-value is very close to zero, the statistically significantness of the trend component can be seen. The model has adjusted R-squared value 0.84, which means that the model is pretty valid.
+
+### Consumer Loan Interest Rates
+
+The graph of consumer loan interest rates across time is
+```{r, warning = FALSE, message = FALSE}
+evds$Consumer_Interests <- as.numeric(evds$Consumer_Interests)
+ggplot(evds, aes(x = Date, y = Consumer_Interests)) + 
+  geom_line()
+```
+
+  The interest rates fluctuate over time but there is no seasonality or trend is seen on the graph. There is a significant increase in 2018 again, possibly in order to mitigate the depreciation of TRY against USD that resulted from Priest Brunson Crisis. 
+
+
+### EUR/TRY Exchange Rates
+
+The graph of EUR/TRY exchange rates across time is 
+```{r, warning = FALSE, message = FALSE}
+evds$EUR_TRY<-as.numeric(evds$EUR_TRY)
+ggplot(evds, aes(x = Date, y = EUR_TRY)) + geom_line()
+```
+
+  Like CPI of vehicles, there is no seasonality observed but there is definitely an upward trend. In addition, the significant increase in 2018 can be seen here, too.
+
+## The Regression
+The regression where the CPI is the dependent variable and its trend, EUR/TRY exchange rates and consumer loan interest rates are predictors is below.
+```{r, warning = FALSE, message = FALSE}
+reg2 <- lm(CPI_Vehicles ~ trend + EUR_TRY + Consumer_Interests, evds)
+summary(reg2)
+```
+
+  As seen above, the model has a very high adjusted R-squared value of 0.97. Also, the interest rates is the only variable that is not statistically significant at all. That is, the prices of vehicles are determined by the exchange rates, and the demand does not have a significant effect on the prices.
+
+  On the other hand, to check the residuals,
+```{r, warning = FALSE, message = FALSE}
+checkresiduals(reg2, lag = 12)
+```
+
+  Here, the autocorrelation plot has three spikes that is visibly higher than the confidence interval. Also, the mean of the residuals seem to be above 0, and the variance increases towards the very end of the plot. Lastly, the distribution seems normal but it has some values way above the prediction around the mean and it is skewed. These violations of assumptions may be a signal for a spurious regression, but one cannot say that for certain., for now.
+
+## Prediction
+
+  Since the data of EUR/TRY exchange rates and consumer interest loans for 04.21 are not required to use, the row of 04.21 was erased. Hence, a new regression model with lags as regressors is conducted in order to predict the 04.21 data of the CPI. Firstly, the cross-correlations are observed. 
+```{r, warning = FALSE, message = FALSE}
+ccf(evds$CPI_Vehicles, evds$EUR_TRY)
+ccf(evds$CPI_Vehicles, evds$Consumer_Interests)
+```
+  
+  Firstly, for EUR/TRY exchange rates, all the lags have strong cross-correlation. Since the best lag is 0, the second best option, -1, was chosen. Secondly, for interest rates, all the lags have strong cross-correlation again. Here, lag 15 was chosen, as it is one of the lags to have the highest autocorrelation.
+  
+  The regression with the lags as regressors is down below.
+```{r, warning = FALSE, message = FALSE}
+reg3 <- lm(evds$CPI_Vehicles ~ lag(evds$EUR_TRY, -1) + lag(evds$Consumer_Interests, 15))
+summary(reg3)
+```
+  Although there was a strong cross-correlation, the lag of the interest rates still is not statistically significant. On the other hand, the exchange rates are statistically significant. Here, the adjusted R-squared value is 0.98, making the model a good one.
+  
+  Also, the residual plots of this regression are down below.
+```{r, warning = FALSE, message = FALSE}
+checkresiduals(reg3)
+```
+ 
+  The result are not so different than the previous regression. There are some differences though, the mean does not diverge much from zero until the ends, there are more spikes in the autocorrelation plot and the residuals seem to have a normal distribution more.
+
+
+  
+  Unfortunately, as mentioned in the beginning, the row of 04.21 was needed to be kept in order to be able to predict the CPI of vehicles of 04.21
+```{r, warning = FALSE, message = FALSE}
+predict(reg3, evds[is.na(CPI_Vehicles) == TRUE])
+```
+ 
+  As the data of 04.21 is actually available, it is clearly seen that the prediction is not correct since it is 523.13 in the actual data. This may be because of the probability of having a spurious regression that underestimated the values of CPI of vehicles.
+  
+## Conclusion
+
+  In conclusion, the CPI of the vehicles can be said to have a strong correlation with EUR/TRY exchange rates, as Turkey mainly imports vehicles and these vehicles are mostly from Europe. Although consumer loan interest rates determine the demands for those loans, which are the key source for purchasing vehicles in Turkey, the interest rates do not seem to effect the prices as much as the exchange rates do. This can be because of a possible multicollinearity between the exchange rates and the interest rates, or the fact that prices are determined according to the exchange rates, more than demands for the vehicles. 
+
+The regression model could not predict the 04.21 data of the CPI of vehicles. The fact that the model was not a very good one (although the adjusted R-squared values were always so close to 1, the regression can be spurious) may be the main reason for this failure.
+  

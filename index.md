@@ -9,3 +9,7 @@
 
 [Here](files/HW1/IE360_HW1.html) are my interpretation of three data series from EVDS and their 
 related Google Trends data.
+
+## Homework 2 (May 07)
+
+[Here](files/HW2/IE360_HW2.html) is my regressions and analyses of a dataset from EVDS.
