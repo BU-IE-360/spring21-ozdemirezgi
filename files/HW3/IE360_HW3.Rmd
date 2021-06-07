@@ -1,0 +1,141 @@
+# IE360 Homework 3
+## Intro
+
+In this homework, the electricity consumption data was extracted from EPÝAÞ for comparing different models. After visualising the data, deseasoning and detrending applications were used in order to make the data as stationary as possible. Lastly, different arima models were tried and compared in terms of their information criteria.
+
+```{r, warning = FALSE, message = FALSE}
+library(readxl)
+library(data.table)
+elec_cons <- read_excel("C:\\Users\\Ezgi-Pc\\Desktop\\elec_cons.xlsx")
+names(elec_cons) <- c("Date", "Hour", "Consumption")
+elec_cons <- data.table(elec_cons)
+```
+
+## Question 1
+
+```{r, warning = FALSE, message = FALSE}
+cons <- elec_cons[,3]
+ts.plot(cons)
+acf(elec_cons[,3])
+pacf(elec_cons[,3])
+```
+
+As seen in the plot and the acf graph of the data, there is a strong seasonality. However, there is almost no trend, maybe a slightly increasing trend that is kind of negligible. In addition, there is a decrease in electricity consumption during a part of 2020, probably due to the COVID-19 pandemic and the fact that people worked from home for a long time. Since workplaces are the places where the electricity consumption is pretty high, the fact that they did not use that much electricity during those months decreased the consumption significantly.
+
+```{r, warning = FALSE, message = FALSE}
+cons_hourly <- ts(cons, frequency = 8766)
+cons_h_dec <- decompose(cons_hourly, type = "additive")
+plot(cons_h_dec)
+```
+
+When the data (hourly level) is decomposed, the trend and the seasonality factor are quite visible. As mentioned above, there is a slightly upwards trend and a strong seasonality.
+
+```{r, warning = FALSE, message = FALSE}
+cons_daily <- ts(cons, frequency = 365)
+cons_d_dec <- decompose(cons_daily, type = "additive")
+plot(cons_d_dec)
+```
+
+When the data (daily level) is decomposed, the trend component shows some seasonality and the seasonality component has a much higher frequence.
+
+```{r, warning = FALSE, message = FALSE}
+cons_weekly <- ts(cons, frequency = 52)
+cons_w_dec <- decompose(cons_weekly, type = "additive")
+plot(cons_w_dec)
+```
+
+When the data (weekly level) is decomposed, the trend component is thicker and has a seasonality in it again. However, there is not much to say about the seasonality component as the frequency is so high that it is not possible to see the graph properly, it is all black.
+```{r, warning = FALSE, message = FALSE}
+cons_monthly <- ts(cons, frequency = 12)
+cons_m_dec <- decompose(cons_monthly, type = "additive")
+plot(cons_m_dec)
+```
+As one would predict, when the data (monthly level) is decomposed, one would find a thicker trend component that has seasonality in it and a black seasonality component with a very high frequency.
+```{r, warning = FALSE, message = FALSE}
+cons_quarterly <- ts(cons, frequency = 4)
+cons_q_dec <- decompose(cons_quarterly, type = "additive")
+plot(cons_q_dec)
+```
+
+Lastly, when the data is decomposed on quarterly level, the same changes as before occur and the trend component gets even thicker, while the seasonality component is all black.
+
+Since the directions of the components are clear, the decoposition of yearly level data was not included.
+
+## Question 2
+
+```{r, warning = FALSE, message = FALSE}
+cons_ts <- ts(cons, frequency = 168)
+cons_dec <- decompose(cons_ts, type = "additive")
+plot(cons_dec)
+
+```
+
+When the data is decomposed according to the pattern of 168 hours, a plot similar to daily level decomposition plot is observed. Here, the random component seems to have constant mean but a seasonality can somewhat be observed. Additionally, some exceptions are also observed as time goes. Probably, these exceptions belong to the days of national or religional holidays. These exceptions were not this possible to observe in the above plots of question 1.
+
+## Question 3
+
+```{r, warning = FALSE, message = FALSE}
+deseas_cons <- cons_ts - cons_dec$seasonal
+detr_cons <- deseas_cons - cons_dec$trend
+plot(detr_cons)
+pacf(detr_cons, na.action = na.pass, lag.max = 48)
+```
+
+When the series is deseasonalised and detrended, the random component of the decomposition is left. In order to choose a lag for an AR model to apply, the pacf graph of the remaining series is examined. In the pacf graph, apart from the first lag, the strongest spike was observed to belong to the 24th lag. Therefore, 24 was chosen as the lag for the AR model. Also, lag 1 and 2 are also tried just to see the aic values.
+```{r, warning = FALSE, message = FALSE}
+arima(detr_cons, order = c(1,0,0))
+```
+
+Here, the AIC value is 828640.
+
+```{r, warning = FALSE, message = FALSE}
+arima(detr_cons, order = c(2,0,0))
+```
+
+Here, the AIC value is 815979.9. Increasing the lag made the model better as the AIC value decreased. 
+
+Now, the lag of 24, which was suggested by the pacf graph, is tried.
+
+```{r, warning = FALSE, message = FALSE}
+arima(detr_cons, order = c(24,0,0))
+```
+
+Above, the results of the ARIMA(0,0,24) model can be found. Here, the aic value is 804300.2. The model is much better than the previous ones.
+
+## Question 4
+
+As the data is deseasonalised and detrended in question 3, detr_cons is used in this question, too.
+
+```{r, warning = FALSE, message = FALSE}
+acf(detr_cons, na.action = na.pass, lag.max = 192)
+```
+
+The remaining seasonality of the data is visible through the acf graph. Here, apart from the immediate lags, the lags of 24 and 168 stand out as they have higher spikes than the rest. However, due to a problem in R, I could not get MA(168) model but as the spike of lag 24 beats lag 168, MA(24) model is tried.
+
+```{r, warning = FALSE, message = FALSE}
+arima(detr_cons, order = c(0,0,1))
+```
+To begin with, MA(1) model was tried. The AIC value is 862775.8
+
+```{r, warning = FALSE, message = FALSE}
+arima(detr_cons, order = c(0,0,24))
+```
+
+Here, a significant improvement is observed as the AIC value decreased to 798419.4
+
+## Question 5
+
+Checking the acf and pacf graphs again,
+
+```{r, warning = FALSE, message = FALSE}
+acf(detr_cons, na.action = na.pass, lag.max = 192)
+pacf(detr_cons, na.action = na.pass, lag.max =168)
+```
+
+Firstly, between AR and MA models, the MA model has a lower AIC value; hence, using MA would be the right choice. Secondly, above graphs show that acf is not geometrically decaying, it is decreasing and seems like increasing towards the end of the graph. However, pacf is geometrically decaying. Therefore, using an MA model seems appropriate, instead of an ARMA model. Overall, MA(24) must be applied to the data. However, for some reason, I was not able to do the prediction using the MA(24) model. Therefore, the last part where the predictions are made and examined by WMAE will be missing. I apologise for the inconvenience.
+
+## Conclusion
+
+Electricity consumption is important to any country as the life of almost every sectors and households is dependent on the electricity and the countries must be able to meet the demand and produce accordingly. In this homework, an attempt to analyse the data and fit the appropriate ARIMA model was made. As mentioned above, due to a reason that I do not know currently, forecasting and examining the forecasting was not possible. 
+
+
