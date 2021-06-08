@@ -1,7 +1,7 @@
 # IE360 Homework 3
 ## Intro
 
-In this homework, the electricity consumption data was extracted from EPÝAÞ for comparing different models. After visualising the data, deseasoning and detrending applications were used in order to make the data as stationary as possible. Lastly, different arima models were tried and compared in terms of their information criteria.
+In this homework, the electricity consumption data was extracted from EPIAS for comparing different models. After visualising the data, deseasoning and detrending applications were used in order to make the data as stationary as possible. Lastly, different arima models were tried and compared in terms of their information criteria.
 
 ```{r, warning = FALSE, message = FALSE}
 library(readxl)
@@ -137,5 +137,4 @@ Firstly, between AR and MA models, the MA model has a lower AIC value; hence, us
 ## Conclusion
 
 Electricity consumption is important to any country as the life of almost every sectors and households is dependent on the electricity and the countries must be able to meet the demand and produce accordingly. In this homework, an attempt to analyse the data and fit the appropriate ARIMA model was made. As mentioned above, due to a reason that I do not know currently, forecasting and examining the forecasting was not possible. 
-
 

@@ -118,7 +118,12 @@ checkresiduals(reg3)
   
   Unfortunately, as mentioned in the beginning, the row of 04.21 was needed to be kept in order to be able to predict the CPI of vehicles of 04.21
 ```{r, warning = FALSE, message = FALSE}
+
 predict(reg3, evds[is.na(CPI_Vehicles) == TRUE])
+```
+```{r}
+is.list(reg3)
+is.data.table(evds[is.na(CPI_Vehicles) == TRUE])
 ```
  
   As the data of 04.21 is actually available, it is clearly seen that the prediction is not correct since it is 523.13 in the actual data. This may be because of the probability of having a spurious regression that underestimated the values of CPI of vehicles.
