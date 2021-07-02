@@ -1,0 +1,815 @@
+# 1)	Introduction
+
+This report is for IE360 Project, which was about forecasting the future sales of nine different products with the possible help of various variables, which were all provided by Trendyol. Apart from the date and the product content id, the variables that are provided for all the products are, namely, price, sold count, visit count, basket count, favoured count, category sold count, category visit count, category basket count, category favoured count, category brand sold count, and Trendyol visit count. The variable names are self-explanatory; however, to explain further,
+
+-	Price variable was for the prices of each product day by day, which was provided in case the sold count depends on the price of the product.
+
+-	Sold count variable was for how many of that product were sold on the given day. Sometimes setting up a model using the lagged variables of the target variable helps more than using other variables.
+
+-	Visit count variable was for how many times the page of that product is visited on the given day. If this variable has a significant effect on the quantity sold, then putting it forward in the algorithm may help the product to sell more than any other actions that can be taken.
+
+-	Basket count variable was for how many times that product was put in the basket of a user on the given day. This variable may help one to understand how many times a user changes their mind and does not decide to buy the product that they put in their basket.
+
+-	Favoured count variable was for how many times the product was favoured by a user. This variable also shows how many people liked the product but postponed buying it due to several reasons that cannot be found that easily. 
+
+-	Category sold count variable was for the total amount sold belonging one category. This variable may indicate the specific times that a product type is needed because sometimes seasonality is on the table and a product may not be bought not because of its price or other characteristic, but just because it is not the time for it.
+
+-	Category visit count variable was for the times that a category page was visited. Likewise, this variable also shows when a category is in demand or not needed.
+
+-	Category basket count variable was for how many times the category that the product belongs to was put in the basket of a user. Similar to other category variables, this variable also shows how many people considers buying from that category in general, which can be related to sales of that products due to the need or want for that category.
+
+-	Category favoured count variable was for how many times a product belonging that category was favoured. Again, this variable also indicates how much a product from that category is at least considered to be bought.
+
+-	Category brand sold count variable was for how much was sold from the brand of the product on the given day. Sometimes, when brands are more seen than before due to many reasons, such as the algorithm putting forward that brand or maybe a new marketing strategy, the products of those brands find more customers than normal days. Hence, this variable may help understanding the sales of the product. 
+
+-	Lastly, Trendyol visit count variable was for how many times the website Trendyol was visited on the given day. This variable may help one to distinguish some important days from others, such as a discount day. Although the discount may not affect the price of the product , when a person decides to check random products in Trendyol due to a discount, they may encounter the product of interest and decide to buy it. Hence, this variable may also be helpful in analysing the sold counts.
+
+
+Although we had these variables that can be used to approximate different possible occurrences that might affect the sold counts for products, which were explained above, our regressions did not give us what we hoped for. Therefore, after running some regressions, we decided to go with standard ARIMA models because they seemed better due to the low adjusted R-squared values of the regressions that we checked. Therefore, after analysing each product, we used appropriate ARIMA models to approach the data and predict the next day, every day. After showing our analyses of each product, we will explain our models in detail, and discuss our results and approach, with their positive and negative sides.
+
+# 2. Approach
+
+In this section, although the process for finding a suitable model and predicting the future was much or less the same for all of them, at least the analyses will be explained separately. In essence, we searched for different possible regressors that may better the analysis and forecasts of the sold counts, but since we could not find anything that can explain the data well after removing the trend and seasonality components in order to make the data stationary, we proceeded with standard ARIMA model, as indicated above. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+require(jsonlite)
+require(httr)
+require(data.table)
+library(fpp)
+library(urca)
+library(zoo)
+library(knitr)
+library(corrplot)
+library(forecast)
+library(urca)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(readxl)
+
+data <- read_excel("C:/Users/aliha/Downloads/dt1.xlsx", 
+                  col_types = c("date", "numeric", "numeric", 
+                                "numeric", "numeric", "numeric", 
+                                "numeric", "numeric", "numeric", 
+                                "numeric", "numeric", "numeric", 
+                                "numeric"))
+data <- data.table(data)
+data <- data[1:3348]
+get_token <- function(username, password, url_site){
+  
+  post_body = list(username=username,password=password)
+  post_url_string = paste0(url_site,'/token/')
+  result = POST(post_url_string, body = post_body)
+  
+  # error handling (wrong credentials)
+  if(result$status_code==400){
+    print('Check your credentials')
+    return(0)
+  }
+  else if (result$status_code==201){
+    output = content(result)
+    token = output$key
+  }
+  
+  return(token)
+}
+
+get_data <- function(start_date='2020-03-20', token, url_site){
+  
+  post_body = list(start_date=start_date,username=username,password=password)
+  post_url_string = paste0(url_site,'/dataset/')
+  
+  header = add_headers(c(Authorization=paste('Token',token,sep=' ')))
+  result = GET(post_url_string, header, body = post_body)
+  output = content(result)
+  data = data.table::rbindlist(output)
+  data[,event_date:=as.Date(event_date)]
+  data = data[order(product_content_id,event_date)]
+  return(data)
+}
+
+
+u_name = "Group6"
+p_word = "WFAc3iaV3yIPS85I"
+subm_url = 'http://46.101.163.177'
+
+username = u_name
+password = p_word
+
+token = get_token(username=u_name, password=p_word, url=subm_url)
+data_1 = get_data(token=token,url=subm_url)
+
+data_1 <- data_1[event_date>"2021-05-31",]
+
+data_1$event_date <- as.Date(data_1$event_date)
+data_1$product_content_id <- as.numeric(data_1$product_content_id)
+names = c("event_date", "sold_count", "product_content_id", "category_sold", "visit_count", "price", "ty_visits", "category_brand_sold", "favoured_count")
+
+
+old_date <- as.Date(data$event_date)
+new_date <- as.Date(data_1$event_date)
+
+API_data <- cbind(new_date, data_1$sold_count, data_1$product_content_id, data_1$category_sold, data_1$visit_count, data_1$price, data_1$ty_visits, data_1$category_brand_sold, data_1$favored_count)
+old_data <- cbind(old_date, data$sold_count, data$product_content_id, data$category_sold, data$visit_count, data$price, data$ty_visits, data$category_brand_sold, data$favored_count)
+
+old_data <- data.table(old_data)
+API_data <- data.table(API_data)
+
+names(old_data) <- names
+names(API_data) <- names
+
+merged_data <- rbind(old_data, API_data)
+```
+
+
+## i)	Coat from ALTINYILDIZ CLASSICS (Product Id: 48740784)
+
+The plot of the sold count of the coat is below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+coat <- merged_data[product_content_id == "48740784", ]
+cs <- coat$sold_count
+ts.plot(cs)
+```
+
+The above plot shows how the sales of the coat changes across time. Except for the increase in the middle of the plot (which corresponds to the last days of October) and small fluctuations at the ends of the plot (which corresponds to the month May in both ends), the coat seems to sell 0, generally. The increase of sales during the last days of October may suggest a seasonality, which can be seen more clearly in the decomposition plot.
+
+The plot of daily decomposition of the data is below. The type used is additive.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+csts <- ts(cs, frequency = 7)
+cs_dec <-decompose(csts, type = "additive")
+plot(cs_dec)
+```
+
+When the data is decomposed, the results are as above. Here, the increase in the middle can still be observed in the detrended and deseasonalised data (the random component). Now, in order to be able to run an ARIMA model, the stationarity of the random component must be examined. After assigning random_cs as the random component of the decomposed series, we used KPSS Test to see if the data is stationary.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+random_cs <- cs_dec$random
+kpss.test(random_cs)
+```
+
+Since the null-hypothesis of the KPSS Test is that the data is stationary, we must fail to reject it. Here, the p-value, which suggests that we fail to reject the null-hypothesis, shows that the random component is stationary. Therefore, we can run an ARIMA model, for which we checked ACF and PACF plots, before using the auto.arima function.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tsdisplay(random_cs)
+```
+
+The ACF and PACF plots of the random component can be seen above. After analysing this plots, although we used other options too, during the submission period, we decided to use ARIMA(2,0,3) model, since it gave the smallest BIC value (which is better to use for large samples) than the other ARIMA models. On the other hand, auto.arima function suggested us using ARIMA(0,0,1)(0,0,1)[7]. Since the models were different, we could not compare AIC or BIC values, but when we checked the residuals, they almost gave the same results.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+autocs<- auto.arima(random_cs)
+model_cs <- arima(random_cs, order = c(2,0,3))
+checkresiduals(autocs)
+checkresiduals(model_cs)
+```
+
+However, the lags of the ACF of auto.arima residuals went above the confidence interval more, and its plot was more skewed than our ARIMA residuals. Therefore, we continued with ARIMA(2,0,3). As a result, after applying the model, we obtained the following table and the actual-fitted plot.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted_cs <- random_cs - residuals(model_cs)
+model_fitted_transformed_cs <- model_fitted_cs + cs_dec$seasonal + cs_dec$trend
+plot(csts, xlab = "Time", ylab = "Sold Count", main="Coat")
+points(model_fitted_transformed_cs, type = "l", col = 4, lty = 2)
+```
+
+## ii)	Bikini Top from TRENDYOLMILLA (Product ID: 73318567)
+
+The plot of the sold count of the first bikini top is below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+bikinitop1 <- merged_data[product_content_id == "73318567",]
+b1sold <- bikinitop1$sold_count
+ts.plot(b1sold)
+```
+
+As seen in the above plot, apart from the fluctuations at the ends of the plot and a small increase during February, the bikini top sold 0. Apart from the small increase of February, the fact that this bikini top sells during spring and summer months can suggest a seasonality, although the sudden increase at the end of the plot (in April) may be due to the algorithm suggesting the product.
+
+The plot of daily decomposition of the data is below. The type used is additive.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+bik1ts <- ts(b1sold, frequency = 7)
+bi1dec <- decompose(bik1ts, type = "additive")
+plot(bi1dec)
+```
+
+In the above plot, the trend of the data that was mentioned above is clearly seen. Like the decomposition of coat, the random component again includes the increases of the ends of the plot, more tamed though. Again, checking the stationarity of the random component,
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+random_bik1 <-  bi1dec$random
+kpss.test(random_bik1)
+```
+
+The KPSS test gives the result that the random component is stationary. Hence, a ARIMA model can be applied. Checking the ACF and PACF plots for this,
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tsdisplay(random_bik1)
+```
+
+From the above plots, we tried various ARIMA models, among which ARIMA(5,0,2) gave the smallest BIC value. However, the auto.arima function suggested ARIMA(5,0,0)(2,0,0)[7]. Since the models cannot be compared in terms of AIC and BIC models, we checked their residuals, which also seemed very similar on the basis of meeting our assumptions about residuals. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+autob1 <- auto.arima(random_bik1)
+arima1 <- arima(random_bik1, order = c(5,0,2))
+checkresiduals(arima1)
+checkresiduals(autob1)
+```
+
+This time, we proceeded with what auto.arima suggested, the SARIMA model. Lastly, the results table and the actual-fitted plot can be found below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted_bikini1 <- random_bik1 - residuals(autob1)
+model_fitted_transformed_bikini1 <- model_fitted_bikini1 + bi1dec$trend + bi1dec$seasonal
+plot(bik1ts, ylab = "Bikini Top 1", main = "Bikini Top 1")
+points(model_fitted_transformed_bikini1, type = "l", col = 2, lty = 2)
+```
+
+## iii)	Bikini Top from TRENDYOLMILLA (Product ID: 32737302)
+
+The plot of the second bikini top is below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+bikinitop2 <- merged_data[product_content_id == "32737302", ]
+b2sold <- bikinitop2$sold_count
+ts.plot(b2sold)
+```
+
+As shown in the above plot, except for the periods before July and after February, the second bikini top sold generally 0. Again, the fact that this product sold during the relatively hot months may suggest a seasonality, which can be removed by decomposing. 
+
+The plot of the decomposed data is 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+b2ts <- ts(b2sold, frequency = 7)
+b2_dec <- decompose(b2ts, type = "additive")
+plot(b2_dec)
+```
+
+Above, the trend of the product mentioned above can be seen more clearly. After removing trend and seasonality components, the plot of the remaining part is seen as the random part of the decomposition. In order to check if an ARIMA model can be applied to the random component, the KPSS Test is run with the results 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+random_bikini2 = b2_dec$random
+kpss.test(random_bikini2)
+```
+
+which shows that the random component is stationary; hence, the ARIMA model can be applied.
+
+In order to decide the lags of the ARIMA model, the obtained ACF and PACF plots are below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tsdisplay(random_bikini2)
+```
+
+From the above plots and trying different ARIMA models in the submission period, we came to the conclusion that the appropriate ARIMA model is ARIMA(3,0,4), which has the smallest BIC value among others. In addition, the auto.arima function suggested using ARIMA(0,0,1)(0,0,2)[7]. When we compared these models in terms of how much the residuals fit our assumptions, the SARIMA model performed better than ARIMA in fitting the normal distribution, whereas ARIMA was better than SARIMA when it came to how many lags went beyond the confidence interval. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_b2 <- arima(random_bikini2, order = c(3,0,4))
+autob2 <- auto.arima(random_bikini2)
+checkresiduals(model_b2)
+checkresiduals(autob2)
+```
+
+
+Hence, we analysed the plots of both models and how the models predict for a couple of days, in the end, we proceeded with the ARIMA model. The results table and the actual-fitted plot is as below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted_b2 <- random_bikini2 - residuals(model_b2)
+model_fitted_tr_b2 <- model_fitted_b2 + b2_dec$seasonal + b2_dec$trend
+plot(b2ts, type = "l", ylab = "Bikini Top 2", main = "Bikini Top 2")
+points(model_fitted_tr_b2, type = "l", col = "red")
+```
+
+## iv. Tights from Trendyolmilla (Product ID=31515569)
+
+The plot of the sold count is below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tayt1 <- merged_data[product_content_id == "31515569",]
+plot(tayt1$sold_count, type="l", ylab="Number of Product Sold", xlab="Days", main="31515569")
+```
+
+There are some peeks which may result from the discounts. For example, largest sale occured at the Black Friday.
+
+Autocorrelation of the data can be seen below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+acf(tayt1$sold_count, lag.max=30)
+pacf(tayt1$sold_count, lag.max=30)
+tayt_ts <- ts(tayt1$sold_count, freq=7, start = c(1,1))
+
+```
+
+As we can see, the most important lag is 1. So, previous days sold count affect next day. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+data_dec <- decompose(tayt_ts, type="multiplicative")
+
+plot(data_dec)
+```
+
+To eliminate the nonconstant variance, multiplicative decomposition is used with frequency of 7. To evaluate the random component we need to check the stationarity. KPSS unit-root test is used to understand the validity of our stationarity assumption.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+data_dec$random%>%ur.kpss()%>%summary()
+```
+Our test statistic is less than all the critical values. Hence, random component of the decomposition is stationary and we can build our ARIMA model for random term.To understand the order of the ARIMA model we should check the ACF and PACF plots.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+random_tayt <- data_dec$random
+
+acf(random_tayt, na.action=na.pass)
+
+pacf(random_tayt, na.action=na.pass)
+
+```
+
+Negative sign at acf plot is a moving average behaviour and similarly negative values at pacf plot means there is a autoregressive component. So, several Arima models are tried and best AIC value is belong to (2,0,1) model. which is also the auto.arima suggestion.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_tayt1 <- auto.arima(random_tayt)
+model_tayt1
+```
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted <- random_tayt - residuals(model_tayt1)
+model_fitted_transformed <- model_fitted*data_dec$trend*data_dec$seasonal
+
+plot(random_tayt, xlab = "Year", ylab = "sold_count", main="tights (random)")
+points(model_fitted, type = "l", col = 4, lty = 2)
+```
+
+Actual random component and the fitted random values are plotted above.
+Actual sold data and the fitted values are plotted as below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+plot(tayt_ts, xlab = "Year", ylab = "sold_count",main="tights ", type="l")
+points(model_fitted_transformed, type = "l", col = 2, lty = 2)
+
+
+```
+
+## v. Bluetooth  Headphone from Xiaomi (Product ID: 6676673) 
+
+The plot of the sold count can be seen on the graph below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+bt_headphone <- merged_data[product_content_id == "6676673",]
+ggplot(bt_headphone, aes(event_date, sold_count))+ labs(x = "Date", y = "Sold Count", title = "Bluetooth Headphone Sales") + geom_line()
+
+```
+
+Fluctuation of this product is relatively high. In order to reduce the effect of these fluctuations and make the data stationary, multiplicative decomposition was implemented.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+ts_bt = ts((bt_headphone$sold_count), freq = 7, start = c(1,1))
+
+bt_decomposed = decompose((ts_bt), type = "multiplicative")
+plot(bt_decomposed)
+```
+
+This is the graph of the decomposed data. From now on, random part of this data will be worked on, in other word the decomposed part of data. The KPSS unit-root test will help identifying the stationarity of this data. 
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+random_bt = bt_decomposed$random
+test_bt = ur.kpss((ts_bt))
+summary(test_bt)
+
+```
+
+Proceeding with this data, now the appropriate ARIMA model should be selected. The most accurate way to select this model may be analyzing the ACF and PACF graphs; however, auto.arima() function was implemented.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+
+tsdisplay(random_bt)
+
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_bt <- auto.arima(random_bt)
+model_bt
+```
+
+Having found the ARIMA model, fitted values were obtained by subtracting residuals from the random part. Since multiplicative transformation was implemented, transformed values were obtained by multiplying fitted values with trend and seasonal values.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+
+model_fitted_bt <- random_bt - residuals(model_bt)
+model_fitted_transformed_bt <- model_fitted_bt * bt_decomposed$trend * bt_decomposed$seasonal
+
+plot(ts_bt, ylab = "Sales", main = "Sales and Predicted Sales")+points(model_fitted_transformed_bt, type = "l", col = 2, lty = 2)
+```
+
+## 	vi. Upright Vacuum Cleaner from Fakir (Product ID: 7061886)
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+vacuum_cleaner1 <- merged_data[product_content_id == "7061886",]
+ts_vacuum = ts(vacuum_cleaner1$sold_count, freq = 7, start = c(1,1))
+ggplot(vacuum_cleaner1, aes(event_date, sold_count))+labs(x = "Date", y = "Sold Count", title = "Upright Vacuum Cleaner Sales") + geom_line()
+```
+
+Just like bluetooth headphone, sales of upright vacuum cleaner have some relatively high fluctuations. In some cases, points that are away from mean + 2 * standard deviations can be interpreted as outlier points. Mean + 2 * standard deviation of this data is just below 115. As it can be seen, there are some points that are over 300. Just like the sales of bluetooth headphone, multiplicative decomposition seemed appropriate. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+vacuum_decomposed <- decompose(ts_vacuum, type = "multiplicative")
+plot(vacuum_decomposed)
+```
+Random part of this data seems to have constant variance and around zero mean. Thus, it can be said that decomposition is sufficient. However, KPSS test can confirm the stationarity of this data.
+
+```{r, warning = FALSE, message = FALSE}
+random_vacuum <- vacuum_decomposed$random
+test_vacuum = ur.kpss(random_vacuum)
+summary(test_vacuum)
+```
+Having confirmed the stationarity thanks to KPSS Unit Root test, ARIMA model can be selected. It would have been better if ARIMA model was found by analyzing ACF and PACF but it was faster doing it with auto.arima() and the results were good enough to use.
+
+```{r,  warning = FALSE, message = FALSE, echo=FALSE}
+tsdisplay(random_vacuum)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_vacuum <- auto.arima(random_vacuum)
+model_vacuum
+```
+
+With the selected ARIMA model, it can be seen how well does the model fit the data.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted_vacuum <- random_vacuum - residuals(model_vacuum)
+model_fitted_transformed_vacuum <- model_fitted_vacuum * vacuum_decomposed$trend * vacuum_decomposed$seasonal
+plot(ts_vacuum, ylab = "Sales", main = "Sales and Predicted Sales" ) + points(model_fitted_transformed_vacuum, type = "l", col = 3, lty = 2)
+```
+
+## vii. Cleanser from La roche Posay (Product ID=85004)
+
+The plot of the sold count is below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+cilt1 <- merged_data[product_content_id == "85004", ]
+
+
+cilt1$event_date <- as.Date(cilt1$event_date)
+cilt1 <- cilt1[order(cilt1$event_date),]
+plot( cilt1$sold_count, type="l", xlab="Days", ylab="amount of cleanser sold", main="85004")
+ 
+```
+
+There are some peeks that come from the discounts.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+acf(cilt1$sold_count, lag.max=30)
+pacf(cilt1$sold_count, lag.max=30)
+```
+
+From the ACF plot we can see that there is a trend at our data. We need to decompose our data to find the stationary random term.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+cilt_ts <- ts(cilt1$sold_count, freq=7, start = c(1,1))
+
+cilt_dec <- decompose(cilt_ts)
+
+
+random_cilt <- cilt_dec$random
+
+cilt_dec$random%>%ur.kpss()%>%summary()
+```
+From the KPSS test we can say that there is no need to further examination, random component is stationary. We can deal with it by ARIMA models. to do that ACF and PACF is plotted below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+acf(cilt_dec$random, na.action = na.pass)
+pacf(cilt_dec$random, na.action = na.pass)
+```
+
+Negative PACF is clear sign of autoregressive model and there is some sort of seasonality at pacf.So model (3,0,1)(0,0,1) is better than tried models and the auto.arima.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_cilt <- arima(cilt_dec$random, order=c(3,0,1), seasonal=c(0,0,1))
+model_cilt
+```
+
+Now, we can move into fit the model and plot it.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted2 <- random_cilt - residuals(model_cilt)
+model_fitted_transformed2 <- model_fitted2+cilt_dec$trend+cilt_dec$seasonal
+
+plot(random_cilt, xlab = "Year", ylab = "sold_count", main="Cleanser (random)")
+points(model_fitted2, type = "l", col = 4, lty = 2)
+
+plot(cilt_ts, xlab = "Year", ylab = "sold count",main="Cleanser ", type="l")
+points(model_fitted_transformed2, type = "l", col = 2, lty = 2)
+
+
+```
+
+## viii. Wet Baby Wipes From Sleepy (Product ID=4066298)
+
+The plot of the sold count is below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+baby1 <- merged_data[product_content_id == "4066298",]
+
+
+baby1$event_date <- as.Date(baby1$event_date)
+
+plot( baby1$sold_count, type="l", xlab="days", ylab="amount of wipes sold", main="4066298")
+```
+
+There are some peeks due to discount periods.
+
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+acf(baby1$sold_count)
+
+
+baby_ts <- ts(baby1$sold_count, freq=7, start = c(1,1))
+
+
+```
+
+As we can se there is a autocorrelation between previous day and current day. To deal with the stationary term we need to do decomposition. Then, we should check the stationarity of the random term by applying the KPSS test.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+baby_dec <- decompose(baby_ts)
+plot(baby_dec)
+
+random_baby <- baby_dec$random
+
+
+baby_dec$random%>%ur.kpss()%>%summary()
+
+
+
+```
+
+According to KPSS test random term is stationary.Now, we need to build our model with help of ACF and PACF plots below.
+
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+acf(baby_dec$random, na.action = na.pass)
+pacf(baby_dec$random, na.action = na.pass)
+
+
+```
+
+Negative PACF values lead to autoregressive behaviour. There is aspike at lag 3 on the ACF plot. Best model in terms of AIC values is (3,0,1) 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_baby <- arima(baby_dec$random, order=c(3,0,1))
+model_baby
+
+```
+
+Here is actual vs fitted plots for both random terms and the original series.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted3 <- random_baby - residuals(model_baby)
+model_fitted_transformed3 <- model_fitted3+baby_dec$trend+baby_dec$seasonal
+
+plot(random_baby, xlab = "Year", ylab = "sold_count", main="Wipes (random)")
+points(model_fitted3, type = "l", col = 4, lty = 2)
+
+plot(baby_ts, xlab = "Year", ylab = "Sold count",main="Wipes", type="l")
+points(model_fitted_transformed3, type = "l", col = 2, lty = 2)
+
+
+```
+
+## 	ix. Electric Toothbrush from Oral-B (Product ID: 32939029)
+
+Forecasting the sales of electric toothbrushes were quite similar as the other electronic products. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tooth_brush <- merged_data[product_content_id == "32939029",]
+ts_tooth_brush <- ts(tooth_brush$sold_count, freq = 7, start = c(1,1))
+ggplot(tooth_brush, aes(event_date, sold_count))+labs(x = "Date", y = "Sold Count", title = "Electric Toothbrush Sales")  + geom_line()
+
+```
+
+To reduce effect of up and down of this data, additive decomposition was implemented. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tooth_brush_decomposed <- decompose(ts_tooth_brush, type = "add")
+plot(tooth_brush_decomposed)
+```
+
+The model has some peaks around some special days; however, it is mostly okay and decomposed properly.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+random_tooth_brush <- tooth_brush_decomposed$random
+test_tooth_brush = ur.kpss(random_tooth_brush)
+summary(test_tooth_brush)
+```
+
+The result of KPSS Unit Root Test is an inditcator that decomposition was made correctly. With that, it is time to choose the ARIMA model. Just like the other products, auto.arima() was fast and thus preferred. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+tsdisplay(random_tooth_brush)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_tooth_brush <- auto.arima(random_tooth_brush)
+model_tooth_brush
+```
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_fitted_tooth_brush <- random_tooth_brush - residuals(model_tooth_brush)
+model_fitted_transformed_tooth_brush <- model_fitted_tooth_brush + tooth_brush_decomposed$trend + tooth_brush_decomposed$seasonal
+
+plot(ts_tooth_brush, ylab = "Sales", main = "Sales and Predicted Sales") + points(model_fitted_transformed_tooth_brush, type = "l", col = 6, lty = 2)
+
+```
+
+# 3. Results
+
+Predictions were made 4 days ahead and with the latest trend and seasonality values. To see results more clearly, a table that holds all necessary information was made. Since the data kept being updated after the last day of submission, the tables below are for the prediction of 03.07 since the predictions are made and these tables are for an instance; likewise, the provided codes will be for 03.07. However, the values used for the last day of the submissions will also be provided.
+
+## Coat
+
+Firstly, the table for the coat is below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast_coat <- predict(model_cs,n.ahead = 4)$pred
+model_forecast_coat <- ts(model_forecast_coat, freq = 7, start = c(58,2))
+
+
+last_table_coat <- cbind(random = random_cs, random_fitted = model_fitted_cs,
+                         actual = csts, modelgen = model_fitted_transformed_cs, 
+                         forecasted = model_forecast_coat)
+last_trend_value_coat <-tail(cs_dec$trend[!is.na(cs_dec$trend)],1)
+seasonality_coat = cs_dec$seasonal[397:400]
+model_forecast_coat = model_forecast_coat + last_trend_value_coat + seasonality_coat
+last_table_coat <- cbind(random = random_cs, random_fitted = model_fitted_cs,
+                         actual = csts, modelgen = model_fitted_transformed_cs, 
+                         forecasted = model_forecast_coat)
+tail(last_table_coat, 6)
+```
+
+## Bikini Top 1
+
+The table for the first bikini is below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast_bikini1 <- predict(autob1,n.ahead = 4)$pred
+model_forecast_bikini1 <- ts(model_forecast_bikini1, freq = 7, start = c(58,2))
+
+
+last_table_bikini1 <- cbind(random = random_bik1, random_fitted = model_fitted_bikini1,
+                            actual = bik1ts, modelgen = model_fitted_transformed_bikini1, 
+                            forecasted = model_forecast_bikini1)
+last_trend_value_bikini1 <-tail(bi1dec$trend[!is.na(bi1dec$trend)],1)
+
+seasonality_bikini1 = bi1dec$seasonal[397:400]
+model_forecast_bikini1 = model_forecast_bikini1 + last_trend_value_bikini1 + seasonality_bikini1
+last_table_bikini1 <- cbind(random = random_bik1, random_fitted = model_fitted_bikini1,
+                            actual = bik1ts, modelgen = model_fitted_transformed_bikini1, 
+                            forecasted = model_forecast_bikini1)
+tail(last_table_bikini1, 6)
+```
+
+## Bikini Top 2
+
+The table for the second bikini is below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast_b2 <- predict(model_b2,n.ahead = 4)$pred
+model_forecast_b2 <- ts(model_forecast_b2, freq = 7, start = c(58,2))
+
+
+
+last_table_b2 <- cbind(random = random_bikini2, random_fitted = model_fitted_b2,
+                       actual = b2ts, modelgen = model_fitted_tr_b2, 
+                       forecasted = model_forecast_b2)
+last_trend_value_b2 <-tail(b2_dec$trend[!is.na(b2_dec$trend)],1)
+seasonality_b2 = b2_dec$seasonal[397:400]
+#seasonality_b2 = b2_dec$seasonal[126:128]
+model_forecast_b2 = model_forecast_b2 + last_trend_value_b2 + seasonality_b2
+last_table_b2 <- cbind(random = random_bikini2, random_fitted = model_fitted_b2,
+                       actual = b2ts, modelgen = model_fitted_tr_b2, 
+                       forecasted = model_forecast_b2)
+tail(last_table_b2, 6)
+```
+
+
+## Tights
+
+Table that shows predictions and actual values is below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+
+model_forecast <- predict(model_tayt1, n.ahead = 4)$pred
+model_forecast=ts(model_forecast,frequency = 7,start=c(58,2))
+
+
+#use last trend value
+last_trend_value <-tail(data_dec$trend[!is.na(data_dec$trend)],1)
+seasonality=data_dec$seasonal[398:400]
+#back to the original series
+
+model_forecast=model_forecast*last_trend_value*seasonality
+last_table_tayt <- cbind(random= random_tayt, randomfitted = model_fitted, actual=tayt_ts, modelgen= model_fitted_transformed, forecasted=model_forecast, seasonality=data_dec$seasonal, trend=data_dec$trend)
+tail(last_table_tayt)
+
+```
+
+## Bluetooth Headphone
+
+Table that holds predictions was made. 
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast_bt <- predict(model_bt,n.ahead = 4)$pred
+model_forecast_bt <- ts(model_forecast_bt, freq = 7, start = c(58,2))
+
+
+last_table_bt <- cbind(random = random_bt, random_fitted = model_fitted_bt, actual = ts_bt, modelgen = model_fitted_transformed_bt, forecasted = model_forecast_bt)
+last_trend_value_bt <-tail(bt_decomposed$trend[!is.na(bt_decomposed$trend)],1)
+last_trend_value_bt <- bt_decomposed$trend[343]
+seasonality_bt = bt_decomposed$seasonal[390:393]
+model_forecast_bt = model_forecast_bt * last_trend_value_bt * seasonality_bt
+last_table_bt <- cbind(random = random_bt, random_fitted = model_fitted_bt, actual = ts_bt, modelgen = model_fitted_transformed_bt, forecasted = model_forecast_bt)
+tail(last_table_bt, 5)
+```
+
+## Upright Vacuum Cleaner
+
+Forecasted values could be found in the table called “last_table_vacuum”.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast_vacuum <- predict(model_vacuum,n.ahead = 4)$pred
+model_forecast_vacuum <- ts(model_forecast_vacuum, freq = 7, start = c(58,2))
+
+last_trend_value_vacuum <-tail(vacuum_decomposed$trend[!is.na(vacuum_decomposed$trend)],1)
+seasonality_vacuum <- vacuum_decomposed$seasonal[390:393]
+model_forecast_vacuum <- model_forecast_vacuum * last_trend_value_vacuum * seasonality_vacuum
+
+last_table_vacuum = cbind(random = random_vacuum, random_fitted = model_fitted_vacuum, actual = ts_vacuum, modelgen = model_fitted_transformed_vacuum, forecasted = model_forecast_vacuum)
+tail(last_table_vacuum, 5)
+```
+
+## Cleanser 
+
+Table can be seen below:
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast2 <- predict(model_cilt, n.ahead = 4)$pred
+model_forecast2=ts(model_forecast2,frequency = 7,start=c(58,2))
+
+#use last trend value
+last_trend_value2 <-tail(cilt_dec$trend[!is.na(cilt_dec$trend)],1)
+seasonality2=cilt_dec$seasonal[398:400]
+
+model_forecast2=model_forecast2+last_trend_value2+seasonality2
+
+
+last_table_cilt <- cbind(random= random_cilt, randomfitted = model_fitted2, actual=cilt_ts, modelgen= model_fitted_transformed2, forecasted=model_forecast2, seasonality=cilt_dec$seasonal, trend=cilt_dec$trend)
+tail(last_table_cilt)
+```
+
+## Wet Baby Wipes
+
+Below the table that contains actual and predicted values can be seen below.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast3 <- predict(model_baby, n.ahead = 4)$pred
+model_forecast3=ts(model_forecast3,frequency = 7,start=c(58,2))
+
+
+#use last trend value
+last_trend_value3 <-tail(baby_dec$trend[!is.na(baby_dec$trend)],1)
+
+seasonality3=baby_dec$seasonal[398:400]
+#back to the original series
+
+model_forecast3=model_forecast3+last_trend_value3+seasonality3
+
+last_table3 <- cbind(random= random_baby, randomfitted = model_fitted3, actual=baby_ts, modelgen= model_fitted_transformed3, forecasted=model_forecast3, seasonality=baby_dec$seasonal, trend=baby_dec$trend)
+
+tail(last_table3)
+```
+
+## Electric Toothbrush
+
+Forecasts can be found in the table called last_table_tooth_brush.
+
+```{r, warning = FALSE, message = FALSE, echo=FALSE}
+model_forecast_tooth_brush <- predict(model_tooth_brush,n.ahead = 4)$pred
+model_forecast_tooth_brush <- ts(model_forecast_tooth_brush, freq = 7, start = c(58,2))
+
+last_trend_value_tooth_brush <-tail(tooth_brush_decomposed$trend[!is.na(tooth_brush_decomposed$trend)],1)
+seasonality_tooth_brush <- tooth_brush_decomposed$seasonal[390:393]
+model_forecast_tooth_brush <- model_forecast_tooth_brush + last_trend_value_tooth_brush + seasonality_tooth_brush
+
+
+last_table_tooth_brush = cbind(random = random_tooth_brush, random_fitted = model_fitted_tooth_brush, actual = ts_tooth_brush, modelgen = model_fitted_transformed_tooth_brush, forecasted = model_forecast_tooth_brush)
+
+tail(last_table_tooth_brush, 5)
+```
+
+Obviously, our predictions were not always correct or sometimes close to the actual sales of the products. There occurred some increases and decreases that we could not explain, which can be due to the dirty nature of the data. That is, since some variables were only NA for some time, especially when the sold count is 0, which made it difficult to understand those increases and decreases harder.
+
+Nonetheless, obviously there are many ways to improve our model and make sure it gives better results, such as adding regressors to our ARIMA models, although the regressors were not the best to work with, or doing more literature review that might help us understand the nature of quantities sold better; hence we would be able to come up with better models. 
+
+# 4. Conclusions and Future Work
+
+All in all, in this project, we aimed to predicting the sales quantity of next day, for a two-week period, from 11.06.2021 to 25.06.2021. In order to achieve this, we firstly analyized our data and decomposed it to get the detrended and deseasonalised data. Later, we tried regressing using different variables we had; however, due to several reasons including the availability of some variables, this did not work as well as we hoped. After that, we proceeded with ARIMA models, either the ones we found with the help of ACF and PACF plots, or the ones that auto.arima function suggested. Lastly, we made our predictions using the appropriate trend and seasonality values, updating our model every day. Although the codes provided included the values used for predicting 03.07, the values used for predicting 26.06 were start(57,2) and dec$seasonal[390:393]. 
+Nonetheless, obviously there are many ways to improve our model and make sure it gives better results, such as adding regressors to our ARIMA models, although the regressors were not the best to work with, or doing more literature review that might help us understand the nature of selling better; hence we would be able to come up with better models. Therefore, for future work, these changes can be made our model, which will probably make better predictions. 
