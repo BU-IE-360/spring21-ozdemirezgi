@@ -16,6 +16,6 @@ related Google Trends data.
 
 ## Term Project (July 02)
 
-[Here](files/IE360_ProjectReport_Group6.html) is the project report.
+[Here](files/Project/IE360_ProjectReport_Group6.html) is the project report.
 
-The RMD file of the project can be found [here](files/IE360_ProjectReport_Group6.Rmd)
+The RMD file of the project can be found [here](files/Project/IE360_ProjectReport_Group6.Rmd)
