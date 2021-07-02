@@ -15,5 +15,7 @@ related Google Trends data.
 [Here](files/HW2/IE360_HW2.html) is my regressions and analyses of a dataset from EVDS.
 
 ## Term Project (July 02)
+
 [Here] (files/Project/IE360_ProjectReport_Group6.html) is our term project report.
+
 [Here] (files/Project(IE360_ProjectReport_Group6.rmd) is our codes for the project.
