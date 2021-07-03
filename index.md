@@ -19,3 +19,9 @@ related Google Trends data.
 [Here](files/Project/IE360_ProjectReport_Group6.html) is the project report.
 
 The RMD file of the project can be found [here](files/Project/IE360_ProjectReport_Group6.Rmd)
+
+## Homework 4-5 (July 03)
+
+[Here](files/HW4-5/IE360_Homework4-5_final.html) is Homework 4-5 .
+
+The RMD file of the homework can be found [here](files/HW4-5/IE360_Homework4-5_FINAL.Rmd)

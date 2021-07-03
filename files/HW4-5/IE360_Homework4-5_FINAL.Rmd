@@ -1,0 +1,1346 @@
+# IE360 Homework 4-5
+
+##Intro
+
+In this homework, the data obtained for the term project is used again. The sold count datas are analysed, appropriate ARIMA models were applied, regressors that can improve the model were found, and lastly, the found regressors were used with the ARIMA models in order to see how the model improves, or if it improves.
+
+Firstly, the data is obtained from API with the codes below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+require(jsonlite)
+require(httr)
+require(data.table)
+library(fpp)
+library(urca)
+library(zoo)
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(forecast)
+
+wmape<- function(o, p) sum(abs(p-o))/sum(abs(o))
+
+data <- read_excel("C:/Users/aliha/Downloads/dt1.xlsx", 
+                  col_types = c("date", "numeric", "numeric", 
+                                "numeric", "numeric", "numeric", 
+                                "numeric", "numeric", "numeric", 
+                                "numeric", "numeric", "numeric", 
+                                "numeric"))
+
+data <- data.table(data)
+data <- data[1:3348]
+get_token <- function(username, password, url_site){
+  
+  post_body = list(username=username,password=password)
+  post_url_string = paste0(url_site,'/token/')
+  result = POST(post_url_string, body = post_body)
+  
+  # error handling (wrong credentials)
+  if(result$status_code==400){
+    print('Check your credentials')
+    return(0)
+  }
+  else if (result$status_code==201){
+    output = content(result)
+    token = output$key
+  }
+  
+  return(token)
+}
+
+get_data <- function(start_date='2020-03-20', token, url_site){
+  
+  post_body = list(start_date=start_date,username=username,password=password)
+  post_url_string = paste0(url_site,'/dataset/')
+  
+  header = add_headers(c(Authorization=paste('Token',token,sep=' ')))
+  result = GET(post_url_string, header, body = post_body)
+  output = content(result)
+  data = data.table::rbindlist(output)
+  data[,event_date:=as.Date(event_date)]
+  data = data[order(product_content_id,event_date)]
+  return(data)
+}
+
+
+u_name = "Group6"
+p_word = "WFAc3iaV3yIPS85I"
+subm_url = 'http://46.101.163.177'
+
+username = u_name
+password = p_word
+
+token = get_token(username=u_name, password=p_word, url=subm_url)
+data_1 = get_data(token=token,url=subm_url)
+
+data_1 <- data_1[event_date>"2021-05-31",]
+
+data_1$event_date <- as.Date(data_1$event_date)
+data_1$product_content_id <- as.numeric(data_1$product_content_id)
+names = c("event_date", "sold_count", "product_content_id", "category_sold", "visit_count", "price", "ty_visits", "category_brand_sold", "favoured_count")
+
+
+old_date <- as.Date(data$event_date)
+new_date <- as.Date(data_1$event_date)
+
+API_data <- cbind(new_date, data_1$sold_count, data_1$product_content_id, data_1$category_sold, data_1$visit_count, data_1$price, data_1$ty_visits, data_1$category_brand_sold, data_1$favored_count)
+old_data <- cbind(old_date, data$sold_count, data$product_content_id, data$category_sold, data$visit_count, data$price, data$ty_visits, data$category_brand_sold, data$favored_count)
+
+old_data <- data.table(old_data)
+API_data <- data.table(API_data)
+
+names(old_data) <- names
+names(API_data) <- names
+
+merged_data <- rbind(old_data, API_data)
+```
+
+Since one week period will be tested, in order to be able to find the amount of deviation from the actual values, we omitted the last 7 days from the data so that we can compare our predictions to actual results. 
+
+## Question 1
+
+### Bikini Top 1
+
+The plot of bikini top 1 is below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bikinitop1 <- merged_data[product_content_id == "73318567",]
+bikinitop <- bikinitop1[1:(404-7)]
+b1sold <- bikinitop1$sold_count
+ts.plot(b1sold)
+```
+
+The plot above shows that the sales increase and fluctuate during spring time and mostly 0 otherwise.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bik1_weekly <- ts(b1sold, frequency = 7)
+b1w_dec <- decompose(bik1_weekly, type = "additive")
+plot(b1w_dec)
+random_b1 <- b1w_dec$random
+kpss.test(random_b1)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bik1_monthly <- ts(b1sold, frequency = 30)
+b1m_dec <- decompose(bik1_monthly, type = "additive")
+plot(b1m_dec)
+random_b11 <- b1m_dec$random
+kpss.test(random_b11)
+```
+
+Both of the random components of the compositions are stationary, according to the KPSS test. However, we continued with weekly decompositions since the data having weekly seasonality made more sense than the data having monthly seasonality as the product is a clothing.
+
+
+### Bikini Top 2
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bikinitop2 <- merged_data[product_content_id == "32737302", ]
+bikinitop2 <- bikinitop2[1:(404-7)]
+b2sold <- bikinitop2$sold_count
+ts.plot(b2sold)
+```
+
+Likewise, apart from the ends of the plot, the sales is mostly 0. Hence, a seasonality is on the table. The sales seem to fluctuate during mostly hot months.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+b2_weekly <- ts(b2sold, frequency = 7)
+b2w_dec <- decompose(b2_weekly, type = "additive")
+plot(b2w_dec)
+random_b2 <- b2w_dec$random
+kpss.test(random_b2)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+b2_monthly <- ts(b2sold, frequency = 30)
+b2m_dec <- decompose(b2_monthly, type = "additive")
+plot(b2m_dec)
+random_b22 <- b2m_dec$random
+kpss.test(random_b22)
+```
+
+Again, the KPSS test suggests that both the random components of the decompositions are stationary. However, as this product is also a clothing item, we chose to continue with the weekly decomposition.
+
+### Coat
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+coat <- merged_data[product_content_id == "48740784", ]
+coat <- coat[1:(404-7)]
+cs <- coat$sold_count
+ts.plot(cs)
+```
+
+According to the plot above, this product seems to sell at the middle of the plot, the relatively cold months. Although same period of the year before is not available, we can argue about a seasonality here.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+cs_weekly <- ts(cs, frequency = 7)
+csw_dec <- decompose(cs_weekly, type = "additive")
+plot(csw_dec)
+random_cs <- csw_dec$random
+kpss.test(random_cs)
+```
+
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+cs_monthly <- ts(cs, frequency = 30)
+csm_dec <- decompose(cs_monthly, type = "additive")
+plot(csm_dec)
+random_css <- csm_dec$random
+kpss.test(random_css)
+```
+
+Again, the KPSS test suggests that the random components of both decomposiitons are stationary. Yet, as we think that the product is more likely to have a weekly pattern, we followed the weekly decomposiiton.
+
+### Tights
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+tayt_data1 <- merged_data[product_content_id == "31515569",]
+
+tayt_data1 <- tayt_data1[order(tayt_data1$event_date),]
+
+tayt1 = tayt_data1[1:(404-7)]
+
+
+plot(tayt1$event_date, tayt1$sold_count, type="l")
+```
+There are some fluctuations due to discount periods.
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+acf(tayt1$sold_count, lag.max=30)
+pacf(tayt1$sold_count, lag.max=30)
+
+tayt_ts2<- ts(tayt1$sold_count, freq=30, start=c(1,1) )
+tayt_ts <- ts(tayt1$sold_count, freq=7, start = c(1,1))
+
+
+```
+
+As we can see the effect of previous day is the most imported.
+
+Decomposition with weekly seasonality and the result of KPSS test is below:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+data_dec <- decompose(tayt_ts)
+
+plot(data_dec)
+
+data_dec$random%>%ur.kpss()%>%summary()
+
+
+```
+
+
+Decomposition for monthly seasonality and the result of KPSS test is below. 
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+data_dec_month <- decompose(tayt_ts2)
+
+plot(data_dec_month)
+
+data_dec_month$random%>%ur.kpss()%>%summary()
+```
+
+Both seasonality levels proved that our random component is stationary. However, for the sake of simplicity we will move on with weekly seasonality.
+
+###Bluetooth Headphone
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+bt_headphone <- merged_data[product_content_id == "6676673",]
+bt_headphone = bt_headphone[1:(404-7)]
+ts_bt_monthly = ts((bt_headphone$sold_count), freq = 30, start = c(1,1))
+bt_decomposed_monthly = decompose((ts_bt_monthly), type = "multiplicative")
+plot(bt_decomposed_monthly)
+ts_bt_weekly = ts((bt_headphone$sold_count), freq = 7, start = c(1,1))
+
+bt_decomposed_weekly = decompose((ts_bt_weekly), type = "multiplicative")
+
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+mean(!is.na(bt_decomposed_monthly$random))
+
+```
+
+As it can be seen, zero mean assumption does not hold. Additionally, the variance does not seem constant. 
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+test_bt_monthly = ur.kpss(bt_decomposed_monthly$random)
+summary(test_bt_monthly)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+test_bt_weekly = ur.kpss(bt_decomposed_weekly$random)
+summary(test_bt_weekly)
+```
+
+As it can be seen, results of KPSS test are somewhat similar but monthly decomposition seems to have better results. It could have given better results if monthly decomposition was applied. However, there is not significant difference between monthly and weekly decompositions. Since weekly decomposition was used for other products, we decomposed bluetooth headphone sales on weekly basis.
+
+
+### Upright Vacuum Cleaner
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+vacuum_cleaner1 <- merged_data[product_content_id == "7061886",]
+vacuum_cleaner1 <- vacuum_cleaner1[1:(404-7)]
+ts_vacuum_weekly = ts(vacuum_cleaner1$sold_count, freq = 7, start = c(1,1))
+
+vacuum_decomposed_weekly <- decompose(ts_vacuum_weekly, type = "multiplicative")
+plot(vacuum_decomposed_weekly)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+ts_vacuum_monthly = ts(vacuum_cleaner1$sold_count, freq = 30, start = c(1,1))
+
+vacuum_decomposed_monthly <- decompose(ts_vacuum_monthly, type = "multiplicative")
+plot(vacuum_decomposed_monthly)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+test_vacuum_weekly = ur.kpss(vacuum_decomposed_weekly$random)
+summary(test_vacuum_weekly)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+test_vacuum_monthly = ur.kpss(vacuum_decomposed_monthly$random)
+summary(test_vacuum_monthly)
+```
+
+Both of them are significant, but weekly decomposition was preferred.
+
+### Cleanser
+
+Here is the plot of the Cleanser and the ACF, PACF plots of it:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+data_cilt1 <- merged_data[product_content_id == "85004", ]
+
+
+data_cilt1 <- data_cilt1[order(data_cilt1$event_date),]
+
+cilt1 =data_cilt1[1:(404-7)]
+
+plot( cilt1$sold_count, type="l")
+ 
+acf(cilt1$sold_count, lag.max=30)
+pacf(cilt1$sold_count, lag.max=30)
+
+```
+
+Decomposition with weekly seasonality and the result of KPSS test is below:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+cilt_ts <- ts(cilt1$sold_count, freq=7, start = c(1,1))
+cilt_dec <- decompose(cilt_ts)
+plot(cilt_dec)
+cilt_dec$random%>%ur.kpss()%>%summary()
+
+```
+
+Decomposition with monthly seasonality and the result of KPSS test is below:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+cilt_ts_month <- ts(cilt1$sold_count, freq=30, start=c(1,1))
+
+cilt_dec_month <- decompose(cilt_ts_month)
+plot(cilt_dec_month)
+
+cilt_dec_month$random%>%ur.kpss()%>%summary()
+
+```
+Due to lower value of the KPSS test of weekly seasonailty level, we will continue with weekly seasonality.
+
+
+### Wet Wipes
+
+Here the plot of the Cleanser and the ACF, PACF plots of it:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+data_baby1 <- merged_data[product_content_id == "4066298",]
+
+data_baby1$event_date <- as.Date(data_baby1$event_date)
+
+baby1 =data_baby1[1:(404-7)]
+plot( baby1$sold_count, type="l")
+
+acf(baby1$sold_count)
+
+```
+
+Decomposition with weekly seasonality and the result of KPSS test is below:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+baby_ts <- ts(baby1$sold_count, freq=7, start = c(1,1))
+
+baby_dec <- decompose(baby_ts)
+plot(baby_dec)
+
+baby_dec$random%>%ur.kpss()%>%summary()
+```
+
+Decomposition with monthly seasonality and the result of KPSS test is below:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+baby_ts2 <- ts(baby1$sold_count, freq=30, start=c(1,1))
+
+baby_dec_month <- decompose(baby_ts2)
+plot(baby_dec_month)
+baby_dec_month$random%>%ur.kpss()%>%summary()
+
+```
+
+Weekly level's critical KPSS value is smaller than monthly level. So, weekly seasonality is used.
+
+
+
+### Electric Toothbrush
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+tooth_brush <- merged_data[product_content_id == "32939029",]
+tooth_brush = tooth_brush[1:(404-7)]
+ts_tooth_brush_weekly <- ts(tooth_brush$sold_count, freq = 7, start = c(1,1))
+ts_tooth_brush_monthly <- ts(tooth_brush$sold_count, freq = 30, start = c(1,1))
+
+tooth_brush_decomposed_weekly <- decompose(ts_tooth_brush_weekly, type = "add")
+tooth_brush_decomposed_monthly <- decompose(ts_tooth_brush_monthly, type = "add")
+
+plot(tooth_brush_decomposed_weekly)
+
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+test_toothbrush_weekly = ur.kpss(tooth_brush_decomposed_weekly$random)
+summary(test_toothbrush_weekly)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+test_toothbrush_monthly = ur.kpss(tooth_brush_decomposed_monthly$random)
+summary(test_toothbrush_monthly)
+```
+Weekly decomposition seems sufficient enough, and intuitively, choosing weekly basis seemed more logical.
+ 
+## Question 2
+
+
+### Bikini Top 1
+
+After trying various ARIMA models along with the auto.arima function, we decided to go with what auro.arima suggested as its residuals seemed to fit more to our assumptions.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+autob1 <- auto.arima(random_b1)
+autob1
+```
+
+In the above model, the AIC value is 3005.6, and the BIC value is 3037.49. The actual-fitted plot and our predictions using this model can be found below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted_b1 <- random_b1 - residuals(autob1)
+model_fitted_transformed_b1 <- model_fitted_b1 + b1w_dec$trend + b1w_dec$seasonal
+
+plot(bik1_weekly)
+points(model_fitted_transformed_b1, type = "l", col = 2, lty = 2)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_forecast_bikini1 <- predict(autob1,n.ahead = 10)$pred
+model_forecast_bikini1 <- ts(model_forecast_bikini1, freq = 7, start = c(57,3))
+
+
+last_table_bikini1 <- cbind(random = random_b1, random_fitted = model_fitted_b1,
+                            actual = bik1_weekly, modelgen = model_fitted_transformed_b1, 
+                            forecasted = model_forecast_bikini1)
+last_trend_value_bikini1 <-tail(b1w_dec$trend[!is.na(b1w_dec$trend)],10)
+
+seasonality_bikini1 = b1w_dec$seasonal[388:397]
+model_forecast_bikini1 = model_forecast_bikini1 + last_trend_value_bikini1 + seasonality_bikini1
+last_table_bikini1 <- cbind(random = random_b1, random_fitted = model_fitted_b1,
+                            actual = bik1_weekly, modelgen = model_fitted_transformed_b1, 
+                            forecasted = model_forecast_bikini1)
+tail(last_table_bikini1, 7)
+```
+
+### Bikini Top 2
+
+After trying various ARIMA models analysing the ACF and PACF plots and auto.arima function, we decided to go with ARIMA(3,0,4), since its residuals were better than other models on the basis of our assumptions.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+arimab2 <- arima(random_b2, order = c(3,0,4))
+arimab2
+BIC(arimab2)
+```
+
+As can be seen above, the AIC value is 2352.23, the BIC value is 2387.952. The actual-fitted plot and our predictions using this model can be found below.
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted_b2 <- random_b2 - residuals(arimab2)
+model_fitted_transformed_b2 <- model_fitted_b2 + b2w_dec$trend + b2w_dec$seasonal
+
+plot(b2_weekly)
+points(model_fitted_transformed_b2, type = "l", col = 2, lty = 2)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_forecast_b2 <- predict(arimab2,n.ahead = 10)$pred
+model_forecast_b2 <- ts(model_forecast_b2, freq = 7, start = c(57,3))
+
+
+
+last_table_b2 <- cbind(random = random_b2, random_fitted = model_fitted_b2,
+                       actual = b2_weekly, modelgen = model_fitted_transformed_b2, 
+                       forecasted = model_forecast_b2)
+last_trend_value_b2 <-tail(b2w_dec$trend[!is.na(b2w_dec$trend)],10)
+seasonality_b2 = b2w_dec$seasonal[388:397]
+model_forecast_b2 = model_forecast_b2 + last_trend_value_b2 + seasonality_b2
+last_table_b2 <- cbind(random = random_b2, random_fitted = model_fitted_b2,
+                       actual = b2_weekly, modelgen = model_fitted_transformed_b2, 
+                       forecasted = model_forecast_b2)
+tail(last_table_b2, 7)
+```
+
+### Coat
+
+We chose ARIMA(2,0,3) to analyse this product because of the fit of its residuals, which is better than the residuals of other models, including the model of auto.arima
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+arimacs <- arima(random_cs, order = c(2,0,3))
+arimacs
+BIC(arimacs)
+```
+
+The above model's AIC value is 1650.83, whereas its BIC value is 1678.615. The actual-fitted plot and our predictions using this model can be found below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted_cs <- random_cs - residuals(arimacs)
+model_fitted_transformed_cs <- model_fitted_cs + csw_dec$trend + csw_dec$seasonal
+
+plot(cs_weekly)
+points(model_fitted_transformed_cs, type = "l", col = 2, lty = 2)
+
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_forecast_coat <- predict(arimacs, n.ahead = 10)$pred
+model_forecast_coat <- ts(model_forecast_coat, freq = 7, start = c(57,3))
+
+
+last_table_coat <- cbind(random = random_cs, random_fitted = model_fitted_cs,
+                         actual = cs_weekly, modelgen = model_fitted_transformed_cs, 
+                         forecasted = model_forecast_coat)
+last_trend_value_coat <-tail(csw_dec$trend[!is.na(csw_dec$trend)],10)
+seasonality_coat = csw_dec$seasonal[388:397]
+model_forecast_coat = model_forecast_coat + last_trend_value_coat + seasonality_coat
+last_table_coat <- cbind(random = random_cs, random_fitted = model_fitted_cs,
+                         actual = cs_weekly, modelgen = model_fitted_transformed_cs, 
+                         forecasted = model_forecast_coat)
+tail(last_table_coat, 7)
+```
+
+## Tights
+
+To find a better arima model, we need to check the ACF and PACF plots.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+random_tayt <- data_dec$random
+
+acf(random_tayt, na.action=na.pass)
+
+pacf(random_tayt, na.action=na.pass)
+```
+
+Negative PACF values is a sign of autoregressive behavior. After trying possible ARIMA models and evaluated their AIC values, we come up with (2,0,2) model. Here its table:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+model_tayt1 <- arima(random_tayt, order=c(2,0,2))
+model_tayt1
+
+```
+
+Actual vs fitted plot is below:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted_tayt <- random_tayt - residuals(model_tayt1)
+model_fitted_transformed_tayt <- model_fitted_tayt+data_dec$trend+data_dec$seasonal
+
+
+plot(tayt_ts, xlab = "days", ylab = "sold count",main="Tights", type="l")
+points(model_fitted_transformed_tayt, type = "l", col = 2, lty = 2)
+
+```
+
+
+## Bluetooth Headphone
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+random_tooth_brush <- tooth_brush_decomposed_weekly$random
+tsdisplay(random_tooth_brush)
+
+
+model_tooth_brush <- arima(random_tooth_brush, order = c(3,0,1))
+AIC(model_tooth_brush)
+model_tooth_brush <- arima(random_tooth_brush, order = c(3,0,0))
+AIC(model_tooth_brush)
+
+model_tooth_brush <- auto.arima(random_tooth_brush)
+
+```
+PACF plot has negative values. This is a sign of autoregrresive model. After trying, auto.arima() function seemed working good enough.
+
+## Upright Vacuum Cleaner
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+random_vacuum = vacuum_decomposed_weekly$random
+tsdisplay(random_vacuum)
+```
+auto.arima() was used.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+random_vacuum <- vacuum_decomposed_weekly$random
+
+model_vacuum <- auto.arima(random_vacuum)
+
+```
+
+## Cleanser
+
+Here is the ACF and PACF plots of the random term:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+random_cilt <- cilt_dec$random
+
+
+acf(cilt_dec$random, na.action = na.pass)
+pacf(cilt_dec$random, na.action = na.pass)
+
+```
+
+
+After evaluating the plots above and using auto arima function we used the model (3,0,2),(0,0,1)
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_cilt1 <- arima(cilt_dec$random,order=c(3,0,2),seasonal=c(0,0,1) )
+model_cilt1
+
+```
+
+Here is actual vs fitted plot:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+model_fitted_cilt <- random_cilt - residuals(model_cilt1)
+model_fitted_transformed_cilt <- model_fitted_cilt+cilt_dec$trend+cilt_dec$seasonal
+
+plot(cilt_ts, xlab = "days", ylab = "sold count",main="Cleanser ", type="l") +points(model_fitted_transformed_cilt, type = "l", col = 2, lty = 2)
+```
+
+
+
+## Wet Wipes
+
+Here is the ACF and PACF plots of the random term:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+random_baby <- baby_dec$random
+acf(baby_dec$random, na.action = na.pass)
+pacf(baby_dec$random, na.action = na.pass)
+```
+Negative values indicates autoregressive behaviour. The model that has best AIC value is choosen. Here is the table of it.
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+model_baby0 <- arima(baby_dec$random, order=c(3,0,1))
+model_baby0
+```
+
+
+Here is actual vs fitted plot:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted_baby <- random_baby - residuals(model_baby0)
+model_fitted_transformed_baby <- model_fitted_baby+baby_dec$trend+baby_dec$seasonal
+
+plot(baby_ts, xlab = "weeks", ylab = "sold count",main="Wet Wipes ", type="l") +points(model_fitted_transformed_baby, type = "l", col = 2, lty = 2)
+```
+
+
+## Electric Toothbrush
+
+auto.arima() was used.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+random_tooth_brush <- tooth_brush_decomposed_weekly$random
+tsdisplay(random_tooth_brush)
+model_tooth_brush <- auto.arima(random_tooth_brush)
+
+```
+
+
+## Question 3
+
+### Bikini Top 1
+
+After trying every variable available as a regressor, we decided to go with the above group since they gave the biggest Adjusted R-squared value.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+summary(lm(random_b1 ~ bikinitop1$favoured_count + bikinitop1$category_sold + bikinitop1$price))
+```
+
+Although this was the best combination that we could find, the Adjusted R-squared value is pretty low. The regression is statistically significant, but neither of the variables are significant less than 0.1 level.
+
+### Bikini Top 2
+
+After trying our variables as regressors, we chose the combination below due to their relatively high Adjusted R-squared value.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+summary(lm(random_b2 ~ bikinitop2$visit_count + bikinitop2$price + bikinitop2$favoured_count))
+```
+
+As seen above, the regression is statistically significant. However, the Adjusted R-squared value is pretty low and the significance level is no less than 0.01, which is the level for price.
+
+### Coat
+
+After analysing our variables, the only variable that was somewhat significant and gave a statistically significant regression was used.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+summary(lm(random_cs ~ coat$category_sold))
+```
+
+The above regression is statistically significant, although the Adjusted R-squared value is really low. The significance level of the category_sold variable is only 0.05, though.
+
+### Tights
+
+As regressor we tried basket cont, price and category sold data, and then chect the AIC value for each of them. According to AIC value category sold data may improve our model.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_tayt2 <- arima(random_tayt,order=c(2,0,2), xreg=tayt1$category_sold)
+model_tayt2
+
+```
+
+As we can see AIC value has improved compared to previous ARIMA model. Here is actual vs fitted plot: 
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted <- random_tayt - residuals(model_tayt2)
+model_fitted_transformed <- model_fitted+data_dec$trend+data_dec$seasonal
+
+plot(tayt_ts, xlab = "weeks", ylab = "sold count",main="Tights", type="l")
+points(model_fitted_transformed, type = "l", col = 2, lty = 2)
+
+
+```
+
+
+### Bluetooth 
+
+According to linear regression model, basket_count seems to have signifacnt effect.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+random_bt = bt_decomposed_weekly$random
+
+model1_bt <- auto.arima(random_bt, xreg = bt_headphone$basket_count)
+
+```
+
+### Upright Vacuum Cleaner
+
+According to linear regression model, basket_count seems to have signifacnt effect.
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+model_vacuum <- auto.arima(random_vacuum, xreg = vacuum_cleaner1$basket_count)
+
+```
+
+### Cleanser
+
+According to AIC values category sold data may improve our model.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_cilt <- arima(cilt_dec$random,order=c(3,0,2),seasonal=c(0,0,1), xreg=cilt1$category_sold)
+model_cilt
+
+```
+
+Actual vs fitted plot:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted2 <- random_cilt - residuals(model_cilt)
+model_fitted_transformed2 <- model_fitted2+cilt_dec$trend+cilt_dec$seasonal
+
+plot(cilt_ts, xlab = "weeks", ylab = "sold count",main="Cleanser ", type="l")
+points(model_fitted_transformed2, type = "l", col = 2, lty = 2)
+
+```
+
+### Wet Wipes
+
+According to AIC values category sold data may improve our model.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_baby <- arima(baby_dec$random, order=c(3,0,1), xreg=baby1$category_sold)
+model_baby
+
+```
+Actual vs fitted plot:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_fitted_ar3 <- random_baby - residuals(model_baby)
+model_fitted_transformed_ar3 <- model_fitted_ar3+baby_dec$trend+baby_dec$seasonal
+
+plot(baby_ts, xlab = "weeks", ylab = "sold count",main="Ailine ", type="l")
+points(model_fitted_transformed_ar3, type = "l", col = 2, lty = 2)
+
+```
+
+
+
+### Eletcric Toothbrush
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+model_tooth_brush <- auto.arima(random_tooth_brush, xreg = tooth_brush$basket_count)
+
+```
+
+Obviously, we expected the price of the products to be effective on how many they sell, basically a significant demand function where an increase in price would decrease the demand and therefore, the sales. In addition, we would expect our other variables to be more significant than they are. However, probably because of the nature of the data, we did not get the results we hoped. That is, since many variables were only NA's especially when the products did not sell, which happened a lot for some of the products, we think we could not obtain the actual effects of the variables on the sales. Therefore, our regressions may reflect less than we hoped.
+
+## Question 4
+
+### Bikini Top 1
+
+After grouping the regressors that will be used for the prediction with the arimax model, we built our arimax model.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+b1_new_favoured_count <- tail(bikinitop1$favoured_count, 7)
+b1_new_category_sold <- tail(bikinitop1$category_sold, 7)
+b1_new_price <- tail(bikinitop1$price, 7)
+b1_new <- cbind(b1_new_favoured_count, b1_new_category_sold, b1_new_price)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+regb1 <- cbind(bikinitop1$favoured_count, bikinitop1$category_sold, bikinitop1$price)
+arimax_b1 <- auto.arima(random_b1, xreg = regb1)
+arimax_b1
+```
+
+Despite the regression results being not that satisfactory, the AIC and BIC values significantly improved. The new AIC is 1040.35 and the new BIC is 1068.25. The new actual-fitted plot and the new predictions are below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+xmodel_fitted_b1 <- random_b1 - residuals(arimax_b1)
+xmodel_fitted_transformed_b1 <- xmodel_fitted_b1 + b1w_dec$trend + b1w_dec$seasonal
+plot(bik1_weekly, ylab = "Bikini Top 1", main = "Bikini Top 1")
+points(xmodel_fitted_transformed_b1, type = "l", col = 2, lty = 2)
+```
+
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+xmodel_forecast_bikini1 <- predict(arimax_b1,n.ahead = 10, newxreg = b1_new)$pred
+xmodel_forecast_bikini1 <- ts(xmodel_forecast_bikini1, freq = 7, start = c(57,3))
+
+
+xlast_table_bikini1 <- cbind(random = random_b1, random_fitted = xmodel_fitted_b1,
+                            actual = bik1_weekly, modelgen = xmodel_fitted_transformed_b1, 
+                            forecasted = xmodel_forecast_bikini1)
+last_trend_value_bikini1 <-tail(b1w_dec$trend[!is.na(b1w_dec$trend)],10)
+
+seasonality_bikini1 = b1w_dec$seasonal[388:397]
+xmodel_forecast_bikini1 = xmodel_forecast_bikini1 + last_trend_value_bikini1 + seasonality_bikini1
+xlast_table_bikini1 <- cbind(random = random_b1, random_fitted = xmodel_fitted_b1,
+                            actual = bik1_weekly, modelgen = xmodel_fitted_transformed_b1, 
+                            forecasted = xmodel_forecast_bikini1)
+tail(xlast_table_bikini1, 7)
+```
+### Bikini Top 2
+
+After grouping the regressors that will be used for predicting with the arimax model, we obtained the arimax model.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+b2_new_visit_count <- tail(bikinitop2$visit_count, 7)
+b2_new_price <- tail(bikinitop2$price, 7)
+b2_new_favoured_count <- tail(bikinitop2$favoured_count, 7)
+b2_new <- cbind(b2_new_visit_count, b2_new_price, b2_new_favoured_count)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+regb2 <- cbind(bikinitop2$visit_count, bikinitop2$price, bikinitop2$favoured_count)
+arimax_b2 <- arima(random_b2, order = c(2,0,5), xreg = regb2)
+arimax_b2
+```
+
+As seen above, the AIC and the BIC values really improved. The new AIC is 1171.19 and the new BIC is 1208.749, which are much less than what we obtained with ARIMA. The new acutal-fitted plot and the new predictions are below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+xmodel_fitted_b2 <- random_b2 - residuals(arimax_b2)
+xmodel_fitted_transformed_b2 <- model_fitted_b2 + b2w_dec$seasonal + b2w_dec$trend
+plot(b2_weekly, type = "l", ylab = "Bikini Top 2", main = "Bikini Top 2")
+points(xmodel_fitted_transformed_b2, type = "l", col = "red")
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+xmodel_forecast_b2 <- predict(arimax_b2,n.ahead = 10, newxreg = b2_new)$pred
+xmodel_forecast_b2 <- ts(xmodel_forecast_b2, freq = 7, start = c(57,3))
+
+
+
+xlast_table_b2 <- cbind(random = random_b2, random_fitted = xmodel_fitted_b2,
+                       actual = b2_weekly, modelgen = xmodel_fitted_transformed_b2, 
+                       forecasted = xmodel_forecast_b2)
+last_trend_value_b2 <-tail(b2w_dec$trend[!is.na(b2w_dec$trend)],10)
+seasonality_b2 = b2w_dec$seasonal[388:397]
+xmodel_forecast_b2 = xmodel_forecast_b2 + last_trend_value_b2 + seasonality_b2
+xlast_table_b2 <- cbind(random = random_b2, random_fitted = xmodel_fitted_b2,
+                       actual = b2_weekly, modelgen = xmodel_fitted_transformed_b2, 
+                       forecasted = xmodel_forecast_b2)
+tail(xlast_table_b2, 7)
+```
+
+### Coat
+
+After getting the regressor that will be used for the predictions with the arimax model, we obtained the arimax model.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+cs_new <- tail(coat$category_sold, 10)
+cs_new
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+arimax_cs <- arima(random_cs, order = c(2,0,3), xreg = coat$category_sold)
+arimax_cs
+```
+
+The information criteria of the model improved again, the new AIC being 1651.98 and the new BIC being 1683.725. The actual-fitted plot of this model and the new predictions can be found below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+xmodel_fitted_cs <- random_cs - residuals(arimax_cs)
+xmodel_fitted_transformed_cs <- xmodel_fitted_cs + csw_dec$seasonal + csw_dec$trend
+plot(cs_weekly, xlab = "Time", ylab = "Sold Count", main="Coat")
+points(xmodel_fitted_transformed_cs, type = "l", col = 4, lty = 2)
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+xmodel_forecast_coat <- predict(arimax_cs, newxreg = cs_new, n.ahead = 10)$pred
+xmodel_forecast_coat <- ts(xmodel_forecast_coat, freq = 7, start = c(57,3))
+
+
+xlast_table_coat <- cbind(random = random_cs, random_fitted = xmodel_fitted_cs,
+                         actual = cs_weekly, modelgen = xmodel_fitted_transformed_cs, 
+                         forecasted = xmodel_forecast_coat)
+last_trend_value_coat <-tail(csw_dec$trend[!is.na(csw_dec$trend)],10)
+seasonality_coat = csw_dec$seasonal[388:397]
+xmodel_forecast_coat = xmodel_forecast_coat + last_trend_value_coat + seasonality_coat
+xlast_table_coat <- cbind(random = random_cs, random_fitted = xmodel_fitted_cs,
+                         actual = cs_weekly, modelgen = xmodel_fitted_transformed_cs, 
+                         forecasted = xmodel_forecast_coat)
+tail(xlast_table_coat, 7)
+```
+
+### Tights
+
+Here we can see the table for the forecasted values:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+new_cat_sold = tail(tayt1$category_sold, 10)
+
+model_forecast <- predict(model_tayt2,newxreg = new_cat_sold,  n.ahead = 10)$pred
+
+model_forecast=ts(model_forecast,frequency = 7,start=c(57,3))
+
+
+#use last trend value
+last_trend_value <-tail(data_dec$trend[!is.na(data_dec$trend)],10)
+seasonality=data_dec$seasonal[388:397]
+#back to the original series
+
+model_forecast1=model_forecast+last_trend_value+seasonality
+
+
+last_table_tayt <- cbind(random= random_tayt, randomfitted = model_fitted, actual=tayt_ts, modelgen= model_fitted_transformed, forecasted=model_forecast, seasonality=data_dec$seasonal, trend=data_dec$trend)
+tail(last_table_tayt,11)
+
+```
+
+Here is the the plot which indicated actual, fitted and forecasted values:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+plot(tayt_ts, xlab = "day", ylab = "sold count",main="Tights ", type="l") + 
+points(model_fitted_transformed, type = "l", col = 2, lty = 2) + points(model_forecast, type = "l", col = 3)
+
+```
+
+
+### Bluetooth Headphone
+
+Predictions with regressors can be found below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bt_decomposed = bt_decomposed_weekly
+new_basketcount = tail(bt_headphone$basket_count, 10)
+model_fitted_bt <- random_bt - residuals(model1_bt)
+model_fitted_transformed_bt <- model_fitted_bt + bt_decomposed$trend + bt_decomposed$seasonal
+
+model_forecast_bt <- predict(model1_bt,n.ahead = 10, newxreg = new_basketcount)$pred
+model_forecast_bt <- ts(model_forecast_bt, freq = 7, start = c(57,5))
+
+
+last_table_bt <- cbind(actual = ts_bt_weekly, forecasted = model_forecast_bt)
+last_trend_value_bt <-tail(bt_decomposed$trend[!is.na(bt_decomposed$trend)],1)
+seasonality_bt = bt_decomposed$seasonal[388:394]
+model_forecast_bt = model_forecast_bt + last_trend_value_bt + seasonality_bt
+last_table_bt <- cbind(actual = ts_bt_weekly, forecasted = model_forecast_bt)
+tail(last_table_bt, 20)
+```
+
+### Upright Vacuum Cleaner
+
+Predictions with regressors can be found below.
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+vacuum_decomposed = vacuum_decomposed_weekly
+new_basketcount = tail(vacuum_cleaner1$basket_count, 10)
+model_fitted_vacuum <- random_vacuum - residuals(model_vacuum)
+model_fitted_transformed_vacuum <- model_fitted_vacuum * vacuum_decomposed$trend * vacuum_decomposed$seasonal
+
+
+model_forecast_vacuum <- predict(model_vacuum ,n.ahead = 10, newxreg = new_basketcount)$pred
+model_forecast_vacuum <- ts(model_forecast_vacuum, freq = 7, start = c(58,3))
+
+last_trend_value_vacuum <-tail(vacuum_decomposed$trend[!is.na(vacuum_decomposed$trend)],1)
+seasonality_vacuum <- vacuum_decomposed$seasonal[388:394]
+model_forecast_vacuum <- model_forecast_vacuum * last_trend_value_vacuum * seasonality_vacuum
+
+last_table_vacuum = cbind(random = random_vacuum, random_fitted = model_fitted_vacuum, actual = ts_vacuum_weekly, modelgen = model_fitted_transformed_vacuum, forecasted = model_forecast_vacuum)
+tail(last_table_vacuum, 20)
+```
+
+
+### Cleanser
+
+Here we can see the table for the forecasted values:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+cilt_cat_sold = tail(cilt1$category_sold,10)
+model_forecast2 <- predict(model_cilt, newxreg = cilt_cat_sold, n.ahead = 10)$pred
+model_forecast2=ts(model_forecast2,frequency = 7,start=c(57,3))
+
+
+#use last trend values
+last_trend_value2 <-tail(cilt_dec$trend[!is.na(cilt_dec$trend)],10)
+seasonality2=cilt_dec$seasonal[388:397]
+
+model_forecast2=model_forecast2+last_trend_value2+seasonality2
+
+
+
+last_table_cilt <- cbind( actual=cilt_ts, modelgen= model_fitted_transformed2, forecasted=model_forecast2, seasonality=cilt_dec$seasonal, trend=cilt_dec$trend)
+tail(last_table_cilt,11)
+
+
+```
+
+
+Here is the the plot which shows actual, fitted and forecasted values:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+plot(cilt_ts, xlab = "weeks", ylab = "sold count",main="Wet Wipes", type="l")
+points(model_fitted_transformed2, type = "l", col = 2, lty = 2)
+points(model_forecast2, type = "l", col = 3)
+```
+
+
+
+### Wet Wipes
+
+Here we can see the table for the forecasted values:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+baby_cat_sold = tail(baby1$category_sold,10)
+
+model_forecast3 <- predict(model_baby,newxreg=baby_cat_sold, n.ahead = 10)$pred
+model_forecast3=ts(model_forecast3,frequency = 7,start=c(57,3))
+
+last_table_baby <- cbind(actual=baby_ts, forecasted=model_forecast3)
+
+#use last trend values
+last_trend_value3 <-tail(baby_dec$trend[!is.na(baby_dec$trend)],10)
+
+seasonality3=baby_dec$seasonal[388:397]
+#back to the original series
+
+model_forecast3=model_forecast3+last_trend_value3+seasonality3
+
+last_table_baby <- cbind(actual=baby_ts, forecasted=model_forecast3)
+
+tail(last_table_baby,11)
+
+
+
+```
+
+
+
+
+### Electric Toothbrush
+
+Predictions with regressors can be found below.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+tooth_brush_decomposed = tooth_brush_decomposed_weekly
+new_basketcount = tail(tooth_brush$basket_count,10)
+model_fitted_tooth_brush <- random_tooth_brush - residuals(model_tooth_brush)
+model_fitted_transformed_tooth_brush <- model_fitted_tooth_brush + tooth_brush_decomposed$trend + tooth_brush_decomposed$seasonal
+
+
+model_forecast_tooth_brush <- predict(model_tooth_brush,n.ahead = 10, newxreg = new_basketcount)$pred
+model_forecast_tooth_brush <- ts(model_forecast_tooth_brush, freq = 7, start = c(57,5))
+
+last_trend_value_tooth_brush <-tail(tooth_brush_decomposed$trend[!is.na(tooth_brush_decomposed$trend)],1)
+seasonality_tooth_brush <- tooth_brush_decomposed$seasonal[388:394]
+model_forecast_tooth_brush <- model_forecast_tooth_brush + last_trend_value_tooth_brush + seasonality_tooth_brush
+
+
+last_table_tooth_brush = cbind(actual = ts_tooth_brush_weekly, forecasted = model_forecast_tooth_brush)
+
+tail(last_table_tooth_brush, 20)
+```
+
+## Errors
+
+### Bikini Top 1
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bikinitop1 <- merged_data[product_content_id == "73318567",]
+wmape(tail(bikinitop1$sold_count, 7), tail(c(xmodel_forecast_bikini1), 7))
+wmape(tail(bikinitop1$sold_count, 7), tail(c(model_forecast_bikini1), 7))
+```
+
+
+### Bikini Top 2
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+bikinitop2 <- merged_data[product_content_id == "32737302", ]
+wmape(tail(bikinitop2$sold_count, 7), tail(c(xmodel_forecast_b2), 7))
+wmape(tail(bikinitop2$sold_count, 7), tail(c(model_forecast_b2), 7))
+```
+
+
+### Coat
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+coat <- merged_data[product_content_id == "48740784", ]
+wmape(tail(coat$sold_count, 7), tail(c(xmodel_forecast_coat), 7))
+wmape(tail(coat$sold_count, 7), tail(c(model_forecast_coat), 7))
+```
+
+### Bluetooth Headphone
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_bt0 <- auto.arima(random_bt)
+model_fitted_bt0 <- random_bt - residuals(model_bt0)
+model_fitted_transformed_bt0 <- model_fitted_bt0 + bt_decomposed$trend + bt_decomposed$seasonal
+
+model_forecast_bt0 <- predict(model_bt0,n.ahead = 10)$pred
+model_forecast_bt0 <- ts(model_forecast_bt0, freq = 7, start = c(57,3))
+
+
+
+last_table_bt0 <- cbind(actual = ts_bt_weekly, modelgen = model_fitted_transformed_bt0, forecasted = model_forecast_bt0)
+last_trend_value_bt0 <-tail(bt_decomposed$trend[!is.na(bt_decomposed$trend)],10)
+
+seasonality_bt0= bt_decomposed$seasonal[388:394]
+model_forecast_bt0 = model_forecast_bt0 + last_trend_value_bt0 + seasonality_bt0
+last_table_bt0 <- cbind(actual = ts_bt_weekly, modelgen = model_fitted_transformed_bt0, forecasted = model_forecast_bt0)
+last_table_bt0 <- data.table(last_table_bt0)
+bt_headphone <- merged_data[product_content_id == "6676673",]
+wmape_bt0 <- wmape(tail(bt_headphone$sold_count,7), tail(last_table_bt0$forecasted,7))
+wmape_bt0
+```
+
+
+### Upright Vacuum Cleaner
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_vacuum0 = auto.arima(random_vacuum)
+model_fitted_vacuum0 <- random_vacuum - residuals(model_vacuum0)
+model_fitted_transformed_vacuum0 <- model_fitted_vacuum0 * vacuum_decomposed$trend * vacuum_decomposed$seasonal
+
+
+model_forecast_vacuum0 <- predict(model_vacuum0,n.ahead = 10)$pred
+model_forecast_vacuum0 <- ts(model_forecast_vacuum0, freq = 7, start = c(58,3))
+
+last_trend_value_vacuum0 <-tail(vacuum_decomposed$trend[!is.na(vacuum_decomposed$trend)],10)
+seasonality_vacuum0 <- vacuum_decomposed$seasonal[388:394]
+model_forecast_vacuum0 <- model_forecast_vacuum0 * last_trend_value_vacuum0 * seasonality_vacuum0
+
+last_table_vacuum0 = cbind(actual = ts_vacuum_weekly, forecasted = model_forecast_vacuum0)
+
+last_table_vacuum0 = data.table(last_table_vacuum0)
+vacuum_cleaner1 <- merged_data[product_content_id == "7061886",]
+wmape_vacuum = wmape(tail(vacuum_cleaner1$sold_count,7), tail(last_table_vacuum0$forecasted,7))
+wmape_vacuum
+
+```
+
+
+### Cleanser
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_cilt1 <- arima(cilt_dec$random,order=c(3,0,2),seasonal=c(0,0,1) )
+model_cilt1
+
+
+model_fitted_cilt <- random_cilt - residuals(model_cilt1)
+model_fitted_transformed_cilt <- model_fitted_cilt+cilt_dec$trend+cilt_dec$seasonal
+
+model_forecast_ar2 <- predict(model_cilt1,  n.ahead = 10)$pred
+model_forecast_ar2=ts(model_forecast_ar2,frequency = 7,start=c(57,3))
+
+
+#use last trend value
+last_trend_value_ar2 <-tail(cilt_dec$trend[!is.na(cilt_dec$trend)],10)
+seasonality_ar2=cilt_dec$seasonal[388:397]
+
+model_forecast_ar2=model_forecast_ar2+last_trend_value_ar2+seasonality_ar2
+
+
+
+last_table_cilt_ar <- cbind( actual=cilt_ts, modelgen= model_fitted_transformed_cilt, forecasted=model_forecast_ar2, seasonality=cilt_dec$seasonal, trend=cilt_dec$trend)
+
+last_table_cilt_ar <- data.table(last_table_cilt_ar)
+
+wmape_cilt_arima <- wmape(tail(data_cilt1$sold_count,7), tail(last_table_cilt_ar$forecasted,7))
+
+wmape_cilt_arima
+
+```
+Using regressor slightly improved our model.
+
+### Wet Wipes
+
+Here is the WMAPE of the ARIMA model. 
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+model_baby0 <- arima(baby_dec$random, order=c(3,0,1))
+
+
+model_fitted_ar3 <- random_baby - residuals(model_baby0)
+model_fitted_transformed_ar3 <- model_fitted_ar3+baby_dec$trend+baby_dec$seasonal
+
+
+model_forecast_ar3 <- predict(model_baby0, n.ahead = 10)$pred
+model_forecast_ar3=ts(model_forecast_ar3,frequency = 7,start=c(57,3))
+
+
+#use last trend value
+last_trend_value_ar3 <-tail(baby_dec$trend[!is.na(baby_dec$trend)],10)
+
+seasonality_ar3=baby_dec$seasonal[388:397]
+#back to the original series
+
+model_forecast_ar3=model_forecast_ar3+last_trend_value_ar3+seasonality_ar3
+
+
+last_table_baby_ar <- cbind( actual=baby_ts, modelgen= model_fitted_transformed_ar3, forecasted=model_forecast_ar3, seasonality=baby_dec$seasonal, trend=baby_dec$trend)
+
+
+last_table_baby_ar <- data.table(last_table_baby_ar)
+
+wmape_baby_arima <-wmape(tail(data_baby1$sold_count,7), tail(last_table_baby_ar$forecasted,7))
+
+wmape_baby_arima
+
+```
+Our arima model with regressor has not improved our model because it created larger WMAPE value. Even though we had thought that it may improve our model, it didn't. However, larger errors may come from using last trend values and last category sold values. When there is a peek at data, its affect does not disapper for sometime, by using last values we double our errors.
+
+### Tights
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+wmape<- function(o, p) sum(abs(p-o))/sum(abs(o))
+
+model_tayt1 <- arima(random_tayt, order=c(2,0,2))
+model_tayt1
+
+
+model_fitted_tayt <- random_tayt - residuals(model_tayt1)
+model_fitted_transformed_tayt <- model_fitted_tayt+data_dec$trend+data_dec$seasonal
+
+model_forecast_ar1 <- predict(model_tayt1,  n.ahead = 10)$pred
+
+model_forecast_ar1=ts(model_forecast_ar1,frequency = 7,start=c(57,3))
+
+#use last trend value
+last_trend_value <-tail(data_dec$trend[!is.na(data_dec$trend)],10)
+seasonality=data_dec$seasonal[388:397]
+#back to the original series
+
+model_forecast_ar1=model_forecast_ar1+last_trend_value+seasonality
+
+last_table_tayt_ar1 <- cbind( actual=tayt_ts, modelgen= model_fitted_transformed_tayt, forecasted=model_forecast_ar1, seasonality=data_dec$seasonal, trend=data_dec$trend)
+
+last_table_tayt_ar1 <- data.table(last_table_tayt_ar1)
+
+wmape_tayt_arima <- wmape(tail(tayt_data1$sold_count,7), tail(last_table_tayt_ar1$forecasted,7))
+
+wmape_tayt_arima
+
+
+```
+Using additional regressor made our model and the forecast worse.
+
+
+
+### Electric Toothbrush
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+model_tooth_brush0 = auto.arima(random_tooth_brush)
+model_fitted_tooth_brush0 <- random_tooth_brush - residuals(model_tooth_brush0)
+model_fitted_transformed_tooth_brush0 <- model_fitted_tooth_brush0 + tooth_brush_decomposed$trend + tooth_brush_decomposed$seasonal
+
+model_forecast_tooth_brush0 <- predict(model_tooth_brush0,n.ahead = 10)$pred
+model_forecast_tooth_brush0 <- ts(model_forecast_tooth_brush0, freq = 7, start = c(57,3))
+
+last_trend_value_tooth_brush0 <-tail(tooth_brush_decomposed$trend[!is.na(tooth_brush_decomposed$trend)],10)
+seasonality_tooth_brush0 <- tooth_brush_decomposed$seasonal[388:394]
+model_forecast_tooth_brush0 <- model_forecast_tooth_brush0 + last_trend_value_tooth_brush0 + seasonality_tooth_brush0
+
+
+last_table_tooth_brush0 = cbind(actual = ts_tooth_brush_weekly, forecasted = model_forecast_tooth_brush0)
+
+last_table_tooth_brush0= data.table(last_table_tooth_brush0)
+tooth_brush <- merged_data[product_content_id == "32939029",]
+
+wmape_toothbrush = wmape(tail(tooth_brush$sold_count,7), tail(last_table_baby_ar$forecasted,7))
+
+wmape_toothbrush
+
+```
+
+
+In this homework, we decomposed the products that we worked on for our term paper, provided ARIMA models 
+and their predictions for them, and then added regressors to our ARIMA models, whose predictions were also provided. All in all, as also our results showed, although adding regressors bettered our ARIMA models in terms of fitting the actual data, they were not as successful as we hoped when it came to predictions. Moreover, some were even worse than the standard ARIMA models. As mentioned above, we think this stems from the dirtiness of the data, which would provide much better models if all the periods were available.
